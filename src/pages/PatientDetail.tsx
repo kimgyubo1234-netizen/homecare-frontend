@@ -619,7 +619,18 @@ const { data: patients }       = usePatientList();
             <Card className="col-span-8 overflow-hidden">
               <div className="h-0.5 w-full bg-blue-500" />
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold">실시간 영상</CardTitle>
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle className="text-sm font-semibold shrink-0">실시간 영상</CardTitle>
+                  {!isLoading && (
+                    <div className="w-1/3">
+                      <ActionOverlayPanel
+                        event={latestEvent}
+                        isConnected={isConnected}
+                        isDelayed={isDelayed}
+                      />
+                    </div>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 {isLoading ? (
@@ -635,13 +646,6 @@ const { data: patients }       = usePatientList();
 
             {/* 위험점수 + 최근 이벤트 */}
             <div className="col-span-4 space-y-4">
-              {!isLoading && (
-                <ActionOverlayPanel
-                  event={latestEvent}
-                  isConnected={isConnected}
-                  isDelayed={isDelayed}
-                />
-              )}
               <Card className={`overflow-hidden ${riskLevel ? riskCardClass[riskLevel] : ''}`}>
                 <div className={`h-0.5 w-full ${riskLevel
                   ? { high: 'bg-red-400', medium: 'bg-yellow-400', low: 'bg-green-400' }[riskLevel]
