@@ -79,7 +79,7 @@ export default function VideoPlayer({ streamPath, onStatusChange, overlayPanel }
         });
 
         const res = await fetch(
-          `${import.meta.env.VITE_MEDIA_BASE}/${streamPath}/whep`,
+          `${import.meta.env.VITE_MEDIA_BASE}/viewer/${streamPath}/whep`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/sdp' },
