@@ -615,17 +615,6 @@ const { data: patients }       = usePatientList();
               </CardContent>
             </Card>
 
-            {/* 추론 결과 — 전체 너비 */}
-            {!isLoading && (
-              <div className="col-span-12">
-                <ActionOverlayPanel
-                  event={latestEvent}
-                  isConnected={isConnected}
-                  isDelayed={isDelayed}
-                />
-              </div>
-            )}
-
             {/* 실시간 영상 */}
             <Card className="col-span-8 overflow-hidden">
               <div className="h-0.5 w-full bg-blue-500" />
@@ -646,6 +635,13 @@ const { data: patients }       = usePatientList();
 
             {/* 위험점수 + 최근 이벤트 */}
             <div className="col-span-4 space-y-4">
+              {!isLoading && (
+                <ActionOverlayPanel
+                  event={latestEvent}
+                  isConnected={isConnected}
+                  isDelayed={isDelayed}
+                />
+              )}
               <Card className={`overflow-hidden ${riskLevel ? riskCardClass[riskLevel] : ''}`}>
                 <div className={`h-0.5 w-full ${riskLevel
                   ? { high: 'bg-red-400', medium: 'bg-yellow-400', low: 'bg-green-400' }[riskLevel]
