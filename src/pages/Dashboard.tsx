@@ -394,10 +394,11 @@ export default function Dashboard() {
               const cameraUnstable = !cameraOnline && riskAge !== null && riskAge < 6 * 60 * 60 * 1000;
               const activityRecent = riskAge !== null && riskAge < 6 * 60 * 60 * 1000;
 
-              // 활동 없음 경고: 위험점수 또는 전체 알림 기준 12시간 이상 없을 때
+              // 활동 없음 경고: 데이터가 있는데 12시간 이상 지났을 때만 표시
               const lastAnyAlertAge = p.lastAnyAlertTs ? tick - new Date(p.lastAnyAlertTs).getTime() : null;
               const lastActivityAge = riskAge ?? lastAnyAlertAge;
-              const noActivity = lastActivityAge === null || lastActivityAge > 12 * 60 * 60 * 1000;
+              const hasAnyHistory = p.riskScoreTs !== null || p.lastAnyAlertTs !== null;
+              const noActivity = hasAnyHistory && lastActivityAge !== null && lastActivityAge > 12 * 60 * 60 * 1000;
 
               return (
                 <button
