@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-PSDrive C | Select-Object Free | ForEach-Object { \"현재 여유공간: $\\([math]::Round\\($_.Free/1GB,1\\)\\)GB\" })",
+      "Bash(Remove-Item \"c:\\\\Users\\\\Public\\\\Documents\\\\졸작 프로젝트\\\\프론트엔드 파일\\\\src\\\\components\\\\DevAlertTrigger.tsx\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://54.180.112.118:5000/api/v1/auth/login --connect-timeout 5)",
+      "Bash(curl -s -o /dev/null -w \"HTTP: %{http_code}\" --connect-timeout 8 http://54.180.112.118:5000/)",
+      "Bash(curl -s -o /dev/null -w \"HTTP: %{http_code}\" --connect-timeout 8 http://54.180.112.118:8889/)",
+      "Bash(cat \"C:\\\\\\\\Users\\\\\\\\lg1\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\c--Users-Public-Documents-----------------\\\\\\\\91fc4638-0907-420b-bba0-298e621cbc15\\\\\\\\tasks\\\\\\\\b07lbu3li.output\")",
+      "PowerShell(Start-Process \"http://localhost:5173\")",
+      "PowerShell(npx playwright screenshot --browser chromium \"http://localhost:5173\" \"C:\\\\Users\\\\lg1\\\\AppData\\\\Local\\\\Temp\\\\verify-screenshots\\\\01-landing.png\" 2>&1)",
+      "PowerShell(npx playwright screenshot --browser chromium \"http://localhost:5173/login\" \"C:\\\\Users\\\\lg1\\\\AppData\\\\Local\\\\Temp\\\\verify-screenshots\\\\02-login.png\" 2>&1)",
+      "PowerShell(python --version 2>&1)",
+      "PowerShell(uvicorn --version 2>&1)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npx vite build)",
+      "Bash(echo \"Exit: $?\")"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\Public\\Documents\\���� ������Ʈ\\����Ʈ���� ����\\src\\components",
+      "c:\\Users\\Public\\Documents\\���� ������Ʈ\\����Ʈ���� ����"
+    ]
+  }
+}

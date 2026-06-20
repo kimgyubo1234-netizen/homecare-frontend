@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(npx playwright *)",
+      "Bash(node -e ' *)",
+      "Bash(cd /tmp)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5176/)",
+      "WebFetch(domain:localhost)",
+      "Bash(findstr \"\\\\.js\")",
+      "Bash(curl -s --max-time 3 http://localhost:5177)",
+      "Bash(netstat -ano)",
+      "Bash(curl -s --max-time 5 http://localhost:5173)",
+      "Bash(echo \"PORT5173_EXIT:$?\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/)",
+      "Bash(ls verify_dashboard_final.png 2>/dev/null || find / -name \"verify_dashboard_final.png\" -maxdepth 5 2>/dev/null | head -3)",
+      "Read(//c//**)",
+      "WebSearch",
+      "Bash(npx kill-port *)",
+      "Bash(taskkill /F /IM node.exe /FI \"WINDOWTITLE eq vite\")",
+      "Bash(node \"C:\\\\Users\\\\lg1\\\\AppData\\\\Local\\\\Temp\\\\verify_ui.mjs\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5174/)",
+      "Bash(npx vite *)",
+      "Bash(findstr \":5173\")",
+      "Bash(echo \"EXIT_CODE: $?\")",
+      "Bash(node -e \"require\\('./node_modules/recharts/package.json'\\)\")",
+      "Bash(pip --version)",
+      "Bash(python -m uvicorn main:app --port 8000)",
+      "Bash(\"c:\\\\users\\\\lg1\\\\appdata\\\\roaming\\\\python\\\\python37\\\\scripts\\\\uvicorn.exe\" main:app --port 8000)",
+      "PowerShell($token = \\(Invoke-RestMethod -Uri \"http://localhost:8000/api/v1/auth/login\" -Method POST -ContentType \"application/json\" -Body '{\"email\":\"test@test.com\",\"password\":\"1234\"}'\\).access_token; Write-Output \"토큰: $token\"; $patients = \\(Invoke-RestMethod -Uri \"http://localhost:8000/api/v1/patients\" -Headers @{Authorization=\"Bearer $token\"}\\).patients; Write-Output \"환자 수: $\\($patients.Count\\)\"; $patients | ForEach-Object { Write-Output \"  - $\\($_.name\\) / 위험점수: $\\($_.latest_risk_score.score\\)\" })",
+      "PowerShell($token = \\(Invoke-RestMethod -Uri \"http://localhost:8000/api/v1/auth/login\" -Method POST -ContentType \"application/json\" -Body '{\"email\":\"test@test.com\",\"password\":\"1234\"}'\\).access_token; $alerts = \\(Invoke-RestMethod -Uri \"http://localhost:8000/api/v1/alerts?days=7\" -Headers @{Authorization=\"Bearer $token\"}\\).items; Write-Output \"알림 수: $\\($alerts.Count\\)\"; $alerts | ForEach-Object { Write-Output \"  - [$\\($_.level\\)] $\\($_.alert_type\\) \\(읽음: $\\($_.is_read\\)\\)\" })",
+      "Bash(Get-ChildItem \"c:\\\\Users\\\\Public\\\\Documents\\\\졸작 프로젝트\\\\프론트엔드 파일\" -File)",
+      "Bash(Select-Object Name)"
+    ]
+  }
+}
