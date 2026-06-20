@@ -487,7 +487,7 @@ export default function Alerts() {
                               {levelLabel[alert.level]}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-sm">{alert.patient_id}</TableCell>
+                          <TableCell className="text-sm">{patientMap[alert.patient_id] ?? alert.patient_id}</TableCell>
                           <TableCell className="text-sm text-slate-500">
                             {alert.device_key}
                           </TableCell>
