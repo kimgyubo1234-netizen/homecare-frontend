@@ -194,7 +194,7 @@ export default function Dashboard() {
 
   const totalPatients  = patients?.length ?? 0;
   const unreadAlerts   = allAlerts?.filter(a => !a.is_read && !readIds.includes(a.id)).length ?? 0;
-  const criticalAlerts = allAlerts?.filter(a => (a.level === 'critical' || a.level === 'high') && !a.is_read && !readIds.includes(a.id)).length ?? 0;
+  const criticalAlerts = allAlerts?.filter(a => a.level === 'critical' || a.level === 'high').length ?? 0;
   const isLoading      = isPatientsLoading || isAlertsLoading;
 
   const tick           = useNow();
