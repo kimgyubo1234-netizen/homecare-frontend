@@ -621,27 +621,27 @@ const { data: patients }       = usePatientList();
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-semibold">실시간 영상</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent>
                 {isLoading ? (
                   <Skeleton className="aspect-video w-full rounded-md" />
                 ) : (
-                  <>
-                    <ActionOverlayPanel
-                      event={latestEvent}
-                      isConnected={isConnected}
-                      isDelayed={isDelayed}
-                    />
-                    <VideoPlayer
-                      streamPath={patientId}
-                      onStatusChange={setWhepConnected}
-                    />
-                  </>
+                  <VideoPlayer
+                    streamPath={patientId}
+                    onStatusChange={setWhepConnected}
+                  />
                 )}
               </CardContent>
             </Card>
 
             {/* 위험점수 + 최근 이벤트 */}
-            <div className="col-span-4 space-y-6">
+            <div className="col-span-4 space-y-4">
+              {!isLoading && (
+                <ActionOverlayPanel
+                  event={latestEvent}
+                  isConnected={isConnected}
+                  isDelayed={isDelayed}
+                />
+              )}
               <Card className={`overflow-hidden ${riskLevel ? riskCardClass[riskLevel] : ''}`}>
                 <div className={`h-0.5 w-full ${riskLevel
                   ? { high: 'bg-red-400', medium: 'bg-yellow-400', low: 'bg-green-400' }[riskLevel]
