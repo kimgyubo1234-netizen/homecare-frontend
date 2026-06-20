@@ -35,13 +35,13 @@ export default function Login() {
   }, []);
 
   const authUser = useAuthStore((s) => s.user);
-  if (isAuthenticated) return <Navigate to={authUser?.role === 'admin' ? '/admin' : '/dashboard'} replace />;
-
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
+
+  if (isAuthenticated) return <Navigate to={authUser?.role === 'admin' ? '/admin' : '/dashboard'} replace />;
 
   const onSubmit = async (data: FormValues) => {
     setLoginError(null);
