@@ -339,6 +339,7 @@ export default function PatientDetail() {
 
   const { data: dashboard, isLoading, error } = useDashboard(patientId);
   const { latestEvent, isConnected, isDelayed } = useActionPolling({ patientId });
+  const [whepConnected, setWhepConnected] = useState(false);
   const isNotFound    = error instanceof NotFoundError;
   const isAccessDenied = error instanceof ForbiddenError;
 
@@ -367,7 +368,7 @@ const { data: patients }       = usePatientList();
   // 카메라 상태 (위험점수 최신 업데이트 시각 기준)
   const riskScoreTs   = dashboard?.latest_risk?.created_at_utc ?? null;
   const riskAge       = riskScoreTs ? Date.now() - new Date(riskScoreTs).getTime() : null;
-  const cameraOnline  = riskAge !== null && riskAge < 60 * 60 * 1000;
+  const cameraOnline  = whepConnected || (riskAge !== null && riskAge < 60 * 60 * 1000);
   const cameraUnstable = !cameraOnline && riskAge !== null && riskAge < 6 * 60 * 60 * 1000;
   const cameraLabel   = cameraOnline ? '연결됨' : cameraUnstable ? '불안정' : '오프라인';
   const cameraColor   = cameraOnline ? 'text-emerald-300' : cameraUnstable ? 'text-amber-300' : 'text-slate-400';
@@ -620,20 +621,21 @@ const { data: patients }       = usePatientList();
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-semibold">실시간 영상</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-3">
                 {isLoading ? (
                   <Skeleton className="aspect-video w-full rounded-md" />
                 ) : (
-                  <VideoPlayer
-                    streamPath={patientId}
-                    overlayPanel={
-                      <ActionOverlayPanel
-                        event={latestEvent}
-                        isConnected={isConnected}
-                        isDelayed={isDelayed}
-                      />
-                    }
-                  />
+                  <>
+                    <ActionOverlayPanel
+                      event={latestEvent}
+                      isConnected={isConnected}
+                      isDelayed={isDelayed}
+                    />
+                    <VideoPlayer
+                      streamPath={patientId}
+                      onStatusChange={setWhepConnected}
+                    />
+                  </>
                 )}
               </CardContent>
             </Card>

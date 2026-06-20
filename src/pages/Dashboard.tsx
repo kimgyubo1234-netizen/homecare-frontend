@@ -156,10 +156,14 @@ export default function Dashboard() {
     const levels: AlertLevel[] = ['critical', 'high', 'medium', 'low'];
     return patients.map(p => {
       const pa = allAlerts?.filter(a => a.patient_id === p.patient_id && !a.is_read && !readIds.includes(a.id)) ?? [];
+      const allPa = allAlerts?.filter(a => a.patient_id === p.patient_id) ?? [];
       const alertHighestLevel = levels.find(l => pa.some(a => a.level === l)) ?? null;
       const highestLevel = alertHighestLevel;
       const lastAlertTs = pa.length > 0
         ? pa.reduce((a, b) => new Date(a.ts_utc) > new Date(b.ts_utc) ? a : b).ts_utc
+        : null;
+      const lastAnyAlertTs = allPa.length > 0
+        ? allPa.reduce((a, b) => new Date(a.ts_utc) > new Date(b.ts_utc) ? a : b).ts_utc
         : null;
       return {
         id: p.patient_id,
@@ -167,6 +171,7 @@ export default function Dashboard() {
         count: pa.length,
         highestLevel,
         lastAlertTs,
+        lastAnyAlertTs,
         riskScore: p.latest_risk_score?.score ?? null,
         riskScoreTs: p.latest_risk_score?.created_at_utc ?? null,
         status: p.status,
@@ -378,7 +383,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-3 gap-5">
             {(patientStats ?? patients.map(p => ({
               id: p.patient_id, name: p.name, count: 0,
-              highestLevel: null, lastAlertTs: null, riskScore: null,
+              highestLevel: null, lastAlertTs: null, lastAnyAlertTs: null, riskScore: null,
               riskScoreTs: null, status: p.status,
             }))).map((p, i) => {
               const st = elderStatus(p.highestLevel);
@@ -389,9 +394,10 @@ export default function Dashboard() {
               const cameraUnstable = !cameraOnline && riskAge !== null && riskAge < 6 * 60 * 60 * 1000;
               const activityRecent = riskAge !== null && riskAge < 6 * 60 * 60 * 1000;
 
-              // 활동 없음 경고: 마지막 알림이 12시간 이상 전이거나 한 번도 없는 경우
-              const lastAlertAge = p.lastAlertTs ? tick - new Date(p.lastAlertTs).getTime() : null;
-              const noActivity = lastAlertAge === null || lastAlertAge > 12 * 60 * 60 * 1000;
+              // 활동 없음 경고: 위험점수 또는 전체 알림 기준 12시간 이상 없을 때
+              const lastAnyAlertAge = p.lastAnyAlertTs ? tick - new Date(p.lastAnyAlertTs).getTime() : null;
+              const lastActivityAge = riskAge ?? lastAnyAlertAge;
+              const noActivity = lastActivityAge === null || lastActivityAge > 12 * 60 * 60 * 1000;
 
               return (
                 <button
@@ -461,10 +467,10 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100 text-xs text-slate-400">
                       {p.riskScore === null && <span>–</span>}
                       <div className="flex items-center gap-1">
-                        {p.lastAlertTs ? (
+                        {p.lastAnyAlertTs ? (
                           <>
                             <Clock className="size-3" />
-                            {relativeTime(p.lastAlertTs, tick)}
+                            {relativeTime(p.lastAnyAlertTs, tick)}
                           </>
                         ) : (
                           <span className="text-emerald-500 font-medium">이상 없음</span>
