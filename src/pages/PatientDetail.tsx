@@ -619,7 +619,18 @@ const { data: patients }       = usePatientList();
             <Card className="col-span-8 overflow-hidden">
               <div className="h-0.5 w-full bg-blue-500" />
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold">실시간 영상</CardTitle>
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle className="text-sm font-semibold shrink-0">실시간 영상</CardTitle>
+                  {!isLoading && (
+                    <div className="w-1/3">
+                      <ActionOverlayPanel
+                        event={latestEvent}
+                        isConnected={isConnected}
+                        isDelayed={isDelayed}
+                      />
+                    </div>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 {isLoading ? (
@@ -628,13 +639,6 @@ const { data: patients }       = usePatientList();
                   <VideoPlayer
                     streamPath={patientId}
                     onStatusChange={setWhepConnected}
-                    overlayPanel={
-                      <ActionOverlayPanel
-                        event={latestEvent}
-                        isConnected={isConnected}
-                        isDelayed={isDelayed}
-                      />
-                    }
                   />
                 )}
               </CardContent>
