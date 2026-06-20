@@ -81,38 +81,34 @@ export default function ActionOverlayPanel({ event, isConnected, isDelayed }: Pr
       className={isDanger ? 'animate-danger-pulse' : undefined}
     >
       {/* 행동 라벨 */}
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between gap-2">
-          <div
-            className="text-xs font-bold text-slate-700 transition-opacity duration-300 truncate"
-            style={{ opacity: visible ? 1 : 0 }}
-          >
-            {getActivityLabel(displayLabel || event.activity_label)}
-          </div>
-          <span
-            className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
-            style={{
-              backgroundColor: colors.bg,
-              border: `1px solid ${colors.border}`,
-              color: colors.text,
-            }}
-          >
-            {colors.label}
-          </span>
+      <div className="flex items-center gap-3">
+        <div
+          className="text-xs font-bold text-slate-700 transition-opacity duration-300 shrink-0"
+          style={{ opacity: visible ? 1 : 0 }}
+        >
+          현재 행동: {getActivityLabel(displayLabel || event.activity_label)}
         </div>
-        <div className="flex items-center justify-between gap-1">
-          <span className="text-[11px] text-slate-400">
-            위험도 {event.risk_score.toFixed(2)}
+        <span
+          className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
+          style={{
+            backgroundColor: colors.bg,
+            border: `1px solid ${colors.border}`,
+            color: colors.text,
+          }}
+        >
+          {colors.label}
+        </span>
+        <span className="text-[11px] text-slate-400 shrink-0">
+          위험도 {event.risk_score.toFixed(2)}
+        </span>
+        <span className="text-[10px] text-slate-400 shrink-0">
+          {formatTimeKST(event.capture_ts)}
+        </span>
+        {isDelayed && (
+          <span className="text-[10px] text-yellow-500 shrink-0" title="데이터 수신 지연">
+            ⚠ 지연
           </span>
-          <span className="text-[10px] text-slate-400">
-            {formatTimeKST(event.capture_ts)}
-          </span>
-          {isDelayed && (
-            <span className="text-[10px] text-yellow-500" title="데이터 수신 지연">
-              ⚠
-            </span>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
