@@ -328,7 +328,7 @@ export default function Profile() {
         <CardContent>
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-slate-800">온보딩 투어 다시 보기</p>
+              <p className="text-sm font-medium text-slate-800">홈페이지 설명 팝업 다시 띄우기</p>
               <p className="text-xs text-slate-400 mt-0.5">서비스 주요 기능을 단계별로 다시 안내받습니다</p>
             </div>
             <button
@@ -336,7 +336,7 @@ export default function Profile() {
               onClick={() => { restartTour(); navigate('/dashboard'); }}
               className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 transition-colors"
             >
-              투어 시작
+              다시 띄우기
             </button>
           </div>
         </CardContent>
