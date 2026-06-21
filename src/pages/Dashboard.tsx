@@ -576,6 +576,7 @@ export default function Dashboard() {
                 </div>
               </div>
             ) : (
+              <div className="max-h-[470px] overflow-y-auto pr-1">
               <div className="relative">
                 {/* 타임라인 세로선 */}
                 <div className="absolute left-[19px] top-3 bottom-3 w-px bg-slate-200" />
@@ -622,6 +623,7 @@ export default function Dashboard() {
                     );
                   })}
                 </div>
+              </div>
               </div>
             )}
           </div>

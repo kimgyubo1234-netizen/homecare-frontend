@@ -354,7 +354,6 @@ export default function PatientDetail() {
   const authUser = useAuthUser();
   const isGuardian = authUser?.role === 'guardian';
   const [chartTab, setChartTab] = useState<'trend' | 'activity' | 'heatmap'>('trend');
-  const [showAllEvents, setShowAllEvents] = useState(false);
 
   useEffect(() => {
     document.title = `어르신 안전 돌봄 서비스 — ${patientId}`;
@@ -738,13 +737,8 @@ export default function PatientDetail() {
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-semibold">최근 이벤트</CardTitle>
-                    {recentEventsSorted.length > 5 && (
-                      <button
-                        onClick={() => setShowAllEvents(v => !v)}
-                        className="text-xs text-blue-500 hover:text-blue-700 font-medium transition-colors"
-                      >
-                        {showAllEvents ? '접기' : `전체보기 (${recentEventsSorted.length}건)`}
-                      </button>
+                    {recentEventsSorted.length > 0 && (
+                      <span className="text-xs text-slate-400">{recentEventsSorted.length}건</span>
                     )}
                   </div>
                 </CardHeader>
@@ -754,8 +748,8 @@ export default function PatientDetail() {
                       {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-8" />)}
                     </div>
                   ) : recentEventsSorted.length > 0 ? (
-                    <ul className="space-y-1.5">
-                      {(showAllEvents ? recentEventsSorted : recentEventsSorted.slice(0, 5)).map((event, i) => {
+                    <ul className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
+                      {recentEventsSorted.map((event, i) => {
                         const EventIcon = getEventIcon(event.event_type);
                         const sevCat = eventLevelCategory(event);
                         const severityColor =

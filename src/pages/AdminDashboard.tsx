@@ -420,7 +420,7 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
-              <div className="max-h-[480px] overflow-y-auto">
+              <div className="max-h-[290px] overflow-y-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10 bg-slate-900">
                     <tr className="border-b border-slate-800 text-left text-xs text-slate-500 [&>th]:border-b [&>th]:border-slate-800">
