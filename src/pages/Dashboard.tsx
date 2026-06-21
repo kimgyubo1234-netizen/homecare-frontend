@@ -466,18 +466,15 @@ export default function Dashboard() {
                     {/* 위험 점수 게이지 */}
                     {p.riskScore !== null && <RiskGaugeBar score={p.riskScore} />}
 
-                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100 text-xs text-slate-400">
-                      {p.riskScore === null && <span>–</span>}
-                      <div className="flex items-center gap-1">
-                        {p.lastAnyAlertTs ? (
-                          <>
-                            <Clock className="size-3" />
-                            {relativeTime(p.lastAnyAlertTs, tick)}
-                          </>
-                        ) : (
-                          <span className="text-emerald-500 font-medium">이상 없음</span>
-                        )}
-                      </div>
+                    <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 text-xs text-slate-400">
+                      {p.lastAnyAlertTs ? (
+                        <>
+                          <Clock className="size-3" />
+                          <span>{relativeTime(p.lastAnyAlertTs, tick)}</span>
+                        </>
+                      ) : cameraOnline ? (
+                        <span className="text-emerald-500 font-medium">이상 없음</span>
+                      ) : null}
                     </div>
                   </div>
 
