@@ -282,15 +282,13 @@ function RiskGauge({ score, level }: { score: number; level: RiskLevel }) {
 
 function ChartTooltip({ active, payload, label }: {
   active?: boolean;
-  payload?: Array<{ name: string; value: number; fill: string; payload: { typeCounts: Record<string, number> } }>;
+  payload?: Array<{ name: string; value: number; fill: string }>;
   label?: string;
 }) {
   if (!active || !payload?.length) return null;
   const filtered = payload.filter(p => p.value > 0);
   if (!filtered.length) return null;
   const total = filtered.reduce((s, p) => s + p.value, 0);
-  const typeCounts = payload[0]?.payload?.typeCounts ?? {};
-  const typeEntries = Object.entries(typeCounts);
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-lg text-xs space-y-1">
       <p className="font-semibold text-slate-700">{label}</p>
@@ -303,16 +301,6 @@ function ChartTooltip({ active, payload, label }: {
       {filtered.length > 1 && (
         <div className="pt-1 border-t border-slate-100 font-semibold text-slate-700 flex justify-between">
           <span>합계</span><span>{total}건</span>
-        </div>
-      )}
-      {typeEntries.length > 0 && (
-        <div className="pt-1 border-t border-slate-100 space-y-0.5">
-          {typeEntries.map(([type, count]) => (
-            <div key={type} className="flex justify-between gap-4 text-slate-500">
-              <span>{type}</span>
-              {count > 1 && <span className="font-medium text-slate-600">{count}건</span>}
-            </div>
-          ))}
         </div>
       )}
     </div>
