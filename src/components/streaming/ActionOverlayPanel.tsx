@@ -99,7 +99,7 @@ export default function ActionOverlayPanel({ event, isConnected, isDelayed }: Pr
           {colors.label}
         </span>
         <span className="text-[11px] text-slate-400 shrink-0">
-          위험도 {event.risk_score.toFixed(2)}
+          위험도 {Math.max(1, Math.min(5, Math.round(event.risk_score * 5)))}
         </span>
         <span className="text-[10px] text-slate-400 shrink-0">
           {formatTimeKST(event.capture_ts)}
