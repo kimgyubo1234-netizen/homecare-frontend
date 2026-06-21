@@ -41,7 +41,7 @@ export function useActionPolling({
 
       if (event) {
         setLatestEvent(event);
-        const age = Date.now() - new Date(event.capture_ts).getTime();
+        const age = Date.now() - new Date(event.ts_utc).getTime();
         setIsDelayed(age > delayThresholdMs);
       }
     } catch {
