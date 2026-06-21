@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePatientList } from '@/hooks/usePatientList';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useAllEvents } from '@/hooks/useAllEvents';
-import { translateEventType, eventSeverityDot, eventSeverityBadge } from '@/lib/event-labels';
+import { translateEventType, eventSeverityDot, eventSeverityBadge, eventCategory } from '@/lib/event-labels';
 import { formatKST } from '@/lib/format';
 import {
   Users, ChevronRight, Clock,
@@ -277,12 +277,11 @@ export default function Dashboard() {
 
       // 카드 등급 = 미읽음 알림 · 위험점수 · 최근 24시간 감지 이벤트 중 최고 등급
       const now = Date.now();
-      const recentMaxSev = pe
+      const recentCats = pe
         .filter(e => now - new Date(e.ts_utc).getTime() < 24 * 60 * 60 * 1000)
-        .reduce((m, e) => Math.max(m, e.severity), 0);
-      // severity 약 0~10 스케일: 7 이상 위험 / 3~6 주의
+        .map(e => eventCategory(e.event_type, e.severity));
       const eventLevel: AlertLevel | null =
-        recentMaxSev >= 7 ? 'high' : recentMaxSev >= 3 ? 'medium' : null;
+        recentCats.includes('danger') ? 'high' : recentCats.includes('warning') ? 'medium' : null;
       const riskLvl = p.latest_risk_score?.risk_level ?? null;
       const riskAsAlert: AlertLevel | null =
         riskLvl === 'high' ? 'high' : riskLvl === 'medium' ? 'medium' : null;
@@ -587,8 +586,8 @@ export default function Dashboard() {
 
                 <div className="space-y-4">
                   {recentEvents.map((event, i) => {
-                    const dot = eventSeverityDot(event.severity);
-                    const badge = eventSeverityBadge(event.severity);
+                    const dot = eventSeverityDot(event.severity, event.event_type);
+                    const badge = eventSeverityBadge(event.severity, event.event_type);
                     const name = patientMap[event.patient_id] ?? event.patient_id;
 
                     return (

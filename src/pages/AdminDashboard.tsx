@@ -6,6 +6,7 @@ import { useReadStore } from '@/lib/read-store';
 import { usePatientList } from '@/hooks/usePatientList';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useAllEvents } from '@/hooks/useAllEvents';
+import { eventCategory } from '@/lib/event-labels';
 import { formatKST } from '@/lib/format';
 import { useMutation } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
@@ -54,11 +55,11 @@ const levelLabel: Record<string, string> = {
   low:      '양호',
 };
 
-// 이벤트 severity(약 0~10) → 등급 라벨/색상 (다크 테마)
-//   안전: <3 / 주의: 3~6 / 위험: 7 이상
-function eventLevel(severity: number): { label: string; bg: string } {
-  if (severity >= 7) return { label: '위험', bg: 'bg-red-500/15 text-red-400' };
-  if (severity >= 3) return { label: '주의', bg: 'bg-amber-500/10 text-amber-400' };
+// 이벤트 유형 기준 등급 라벨/색상 (다크 테마) — 낙상=위험, 비정상=주의, 정상=안전
+function eventLevel(eventType: string, severity: number): { label: string; bg: string } {
+  const c = eventCategory(eventType, severity);
+  if (c === 'danger') return { label: '위험', bg: 'bg-red-500/15 text-red-400' };
+  if (c === 'warning') return { label: '주의', bg: 'bg-amber-500/10 text-amber-400' };
   return { label: '안전', bg: 'bg-emerald-500/10 text-emerald-400' };
 }
 
@@ -374,7 +375,7 @@ export default function AdminDashboard() {
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
                   {recentEvents.map(e => {
-                    const lv = eventLevel(e.severity);
+                    const lv = eventLevel(e.event_type, e.severity);
                     return (
                       <tr
                         key={e.id}

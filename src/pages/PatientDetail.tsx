@@ -31,13 +31,13 @@ import {
 } from 'recharts';
 import type { RiskLevel, AlertLevel, EventItem, RiskScore } from '@/types/api';
 import { usePatientEvents } from '@/hooks/usePatientEvents';
-import { severityCategory } from '@/lib/event-labels';
+import { eventCategory } from '@/lib/event-labels';
 
 // 알림 분석 차트용 정규화 타입 — 이벤트/알림 공통
 interface AnalysisItem { ts_utc: string; type: string; level: AlertLevel; }
 
 function eventToAnalysis(e: EventItem): AnalysisItem {
-  const c = severityCategory(e.severity);
+  const c = eventCategory(e.event_type, e.severity);
   const level: AlertLevel =
     c === 'danger' ? 'critical' :
     c === 'warning' ? 'medium' : 'low';
@@ -83,8 +83,8 @@ function relativeTime(ts: string): string {
   return `${Math.floor(hours / 24)}일 전`;
 }
 
-function severityBorderClass(severity: number): string {
-  const c = severityCategory(severity);
+function severityBorderClass(severity: number, eventType = ''): string {
+  const c = eventCategory(eventType, severity);
   if (c === 'danger') return 'border-l-2 border-red-400 pl-2';
   if (c === 'warning') return 'border-l-2 border-yellow-400 pl-2';
   return 'border-l-2 border-green-400 pl-2';
@@ -744,14 +744,14 @@ export default function PatientDetail() {
                     <ul className="space-y-1.5">
                       {(showAllEvents ? dashboard.recent_events : dashboard.recent_events.slice(0, 5)).map((event, i) => {
                         const EventIcon = getEventIcon(event.event_type);
-                        const sevCat = severityCategory(event.severity);
+                        const sevCat = eventCategory(event.event_type, event.severity);
                         const severityColor =
                           sevCat === 'danger' ? 'bg-red-500' :
                           sevCat === 'warning' ? 'bg-yellow-400' : 'bg-green-400';
                         return (
                           <li
                             key={event.id}
-                            className={`flex items-center gap-2.5 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 animate-in fade-in slide-in-from-right-2 duration-300 ${severityBorderClass(event.severity)}`}
+                            className={`flex items-center gap-2.5 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 animate-in fade-in slide-in-from-right-2 duration-300 ${severityBorderClass(event.severity, event.event_type)}`}
                             style={{ animationDelay: `${i * 80}ms` }}
                           >
                             <span className={`size-1.5 rounded-full shrink-0 ${severityColor}`} />
