@@ -370,7 +370,7 @@ export default function AdminDashboard() {
                               <span className="size-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
                             )}
                             <div className="flex flex-col leading-tight">
-                              <span className="font-medium text-white">{p.name} 어르신</span>
+                              <span className="font-medium text-white">{p.name}</span>
                               <span className="text-[11px] font-mono text-slate-500">{p.patient_id}</span>
                             </div>
                           </div>
@@ -439,7 +439,7 @@ export default function AdminDashboard() {
                         onClick={() => navigate(`/dashboard/${e.patient_id}`)}
                       >
                         <td className="px-5 py-3 font-medium text-white">
-                          {patientMap[e.patient_id] ? `${patientMap[e.patient_id]} 어르신` : e.patient_id}
+                          {patientMap[e.patient_id] ?? e.patient_id}
                         </td>
                         <td className="px-5 py-3 text-slate-300">{translateAlertType(e.event_type)}</td>
                         <td className="px-5 py-3">

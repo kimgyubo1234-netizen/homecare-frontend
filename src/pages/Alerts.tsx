@@ -403,7 +403,7 @@ export default function Alerts() {
                               onClick={() => navigate(`/dashboard/${alert.patient_id}`)}
                               className="text-sm font-semibold text-slate-800 hover:text-blue-700 transition-colors"
                             >
-                              {name} 어르신
+                              {name}
                             </button>
                             <span className="text-slate-300">·</span>
                             <span className="text-sm text-slate-500">{alert.alert_type}</span>
@@ -590,7 +590,7 @@ export default function Alerts() {
                   <span className={`size-2 rounded-full shrink-0 ${dot}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-sm font-semibold text-slate-800">{name} 어르신</span>
+                      <span className="text-sm font-semibold text-slate-800">{name}</span>
                       <span className="text-slate-300">·</span>
                       <span className="text-sm text-slate-500">{translateEventType(event.event_type)}</span>
                     </div>

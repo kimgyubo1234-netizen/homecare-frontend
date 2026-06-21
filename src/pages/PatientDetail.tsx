@@ -479,14 +479,14 @@ export default function PatientDetail() {
                 className="flex items-center gap-1 rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-medium hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="size-4" />
-                {prevPatient ? `${prevPatient.name} 어르신` : '이전'}
+                {prevPatient ? prevPatient.name : '이전'}
               </button>
               <button
                 onClick={() => nextPatient && navigate(`/dashboard/${nextPatient.patient_id}`)}
                 disabled={!nextPatient}
                 className="flex items-center gap-1 rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-medium hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                {nextPatient ? `${nextPatient.name} 어르신` : '다음'}
+                {nextPatient ? nextPatient.name : '다음'}
                 <ChevronRight className="size-4" />
               </button>
             </div>
@@ -510,7 +510,7 @@ export default function PatientDetail() {
             ) : (
               <div>
                 <h1 className="text-2xl font-extrabold leading-tight">
-                  {patientName} 어르신
+                  {patientName}
                 </h1>
                 {!isGuardian && <p className="mt-1 text-sm text-white/55">{patientId}</p>}
               </div>
@@ -639,7 +639,7 @@ export default function PatientDetail() {
                 ) : dashboard ? (
                   <div className="grid grid-cols-4 gap-4 text-sm">
                     {[
-                      { icon: User,     iconClass: 'bg-blue-100',   iconColor: 'text-blue-600',   label: '이름', value: `${dashboard.patient.name} 어르신` },
+                      { icon: User,     iconClass: 'bg-blue-100',   iconColor: 'text-blue-600',   label: '이름', value: dashboard.patient.name },
                       { icon: Users,    iconClass: 'bg-purple-100', iconColor: 'text-purple-600', label: '성별', value: dashboard.patient.gender ?? '미등록' },
                       { icon: Calendar, iconClass: 'bg-orange-100', iconColor: 'text-orange-600', label: '나이', value: dashboard.patient.birth_date ? `${formatAge(dashboard.patient.birth_date)}세` : '미등록' },
                       {
@@ -975,7 +975,7 @@ export default function PatientDetail() {
               <tbody>
                 <tr className="border-b border-slate-100">
                   <td className="py-1.5 pr-4 text-slate-500 w-24">이름</td>
-                  <td className="py-1.5 font-medium">{dashboard.patient.name} 어르신</td>
+                  <td className="py-1.5 font-medium">{dashboard.patient.name}</td>
                   <td className="py-1.5 pr-4 text-slate-500 w-24">어르신 ID</td>
                   <td className="py-1.5 font-medium">{patientId}</td>
                 </tr>

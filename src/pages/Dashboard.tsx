@@ -601,7 +601,6 @@ export default function Dashboard() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="text-sm font-bold text-slate-800">{name}</span>
-                                <span className="text-sm text-slate-400">어르신</span>
                                 <span className="text-sm text-slate-600">·</span>
                                 <span className="text-sm text-slate-600">{translateEventType(event.event_type)}</span>
                               </div>

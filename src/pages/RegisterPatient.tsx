@@ -324,7 +324,7 @@ export default function RegisterPatient() {
             <CardContent className="space-y-4 pt-5">
               <div className="rounded-2xl bg-slate-50 border border-slate-100 overflow-hidden divide-y divide-slate-100">
                 {[
-                  { label: '이름', value: `${form.name} 어르신` },
+                  { label: '이름', value: form.name },
                   { label: '생년월일', value: form.birthDate || '미입력' },
                   { label: '성별', value: form.gender || '미입력' },
                   { label: '디바이스 키', value: form.deviceKey, mono: true },

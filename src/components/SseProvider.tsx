@@ -36,7 +36,7 @@ function playAlertSound(critical: boolean) {
 function showBrowserNotification(alert: AlertItem, patientName: string) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const levelText = levelLabel[alert.level] ?? alert.level;
-  new Notification(`[${levelText}] ${patientName} 어르신`, {
+  new Notification(`[${levelText}] ${patientName}`, {
     body: alert.message || alert.alert_type,
     icon: '/favicon.ico',
     tag: `alert-${alert.id}`,
@@ -44,7 +44,7 @@ function showBrowserNotification(alert: AlertItem, patientName: string) {
 }
 
 function showAlertToast(alert: AlertItem, patientName: string) {
-  const title = `[${levelLabel[alert.level] ?? alert.level}] ${patientName} 어르신`;
+  const title = `[${levelLabel[alert.level] ?? alert.level}] ${patientName}`;
   const opts = {
     description: alert.message || alert.alert_type,
     duration: alert.level === 'critical' ? 10_000 : 6_000,

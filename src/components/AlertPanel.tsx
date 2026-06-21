@@ -177,7 +177,7 @@ export default function AlertPanel({ open, onClose }: Props) {
                         <div className="min-w-0 flex-1">
                           <div className="mb-0.5 flex items-center justify-between gap-2">
                             <span className="truncate text-xs font-semibold text-slate-800">
-                              {name} 어르신
+                              {name}
                             </span>
                             <span
                               className="shrink-0 text-[10px] text-slate-400"
