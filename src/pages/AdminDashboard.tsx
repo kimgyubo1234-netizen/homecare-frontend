@@ -361,16 +361,17 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-800 text-left text-xs text-slate-500">
-                    <th className="px-5 py-3 font-medium">어르신</th>
-                    <th className="px-5 py-3 font-medium">유형</th>
-                    <th className="px-5 py-3 font-medium">등급</th>
-                    <th className="px-5 py-3 font-medium">시각</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
+              <div className="max-h-[480px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 z-10 bg-slate-900">
+                    <tr className="border-b border-slate-800 text-left text-xs text-slate-500 [&>th]:border-b [&>th]:border-slate-800">
+                      <th className="px-5 py-3 font-medium">어르신</th>
+                      <th className="px-5 py-3 font-medium">유형</th>
+                      <th className="px-5 py-3 font-medium">등급</th>
+                      <th className="px-5 py-3 font-medium">시각</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
                   {recentEvents.map(e => {
                     const lv = eventLevel(e.severity);
                     return (
@@ -392,8 +393,9 @@ export default function AdminDashboard() {
                       </tr>
                     );
                   })}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </section>

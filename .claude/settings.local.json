@@ -47,7 +47,9 @@
       "PowerShell(git add -A)",
       "PowerShell(git push origin main)",
       "PowerShell(npx tsc -b 2>$null; \"TSC_EXIT=$LASTEXITCODE\")",
-      "PowerShell(\"---\")"
+      "PowerShell(\"---\")",
+      "PowerShell(git commit -F COMMIT_MSG.txt)",
+      "PowerShell(git commit -m 'fix: ������ �ֱ� ���� ���̺��� ��ũ�� ���� �߰� �� ��� ����')"
     ]
   }
 }
