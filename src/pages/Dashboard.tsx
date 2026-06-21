@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { AlertLevel } from '@/types/api';
 import { useAuthUser } from '@/lib/auth-store';
 import { useReadStore } from '@/lib/read-store';
+import { useWhepStatus } from '@/hooks/useWhepStatus';
 
 // ── constants ──────────────────────────────────────────────────────────────
 
@@ -127,6 +128,114 @@ function RiskGaugeBar({ score }: { score: number }) {
         </span>
       </div>
     </div>
+  );
+}
+
+// ── patient card ───────────────────────────────────────────────────────────
+
+interface PatientStat {
+  id: string;
+  name: string;
+  count: number;
+  highestLevel: AlertLevel | null;
+  lastAlertTs: string | null;
+  lastAnyAlertTs: string | null;
+  riskScore: number | null;
+  riskScoreTs: string | null;
+  status: string;
+}
+
+function PatientCard({ p, tick, index }: { p: PatientStat; tick: number; index: number }) {
+  const navigate = useNavigate();
+  const whepConnected = useWhepStatus(p.id);
+  const st = elderStatus(p.highestLevel);
+
+  const riskAge = p.riskScoreTs ? tick - new Date(p.riskScoreTs).getTime() : null;
+  const cameraOnline   = whepConnected || (riskAge !== null && riskAge < 60 * 60 * 1000);
+  const cameraUnstable = !cameraOnline && riskAge !== null && riskAge < 6 * 60 * 60 * 1000;
+  const activityRecent = riskAge !== null && riskAge < 6 * 60 * 60 * 1000;
+
+  const lastAnyAlertAge = p.lastAnyAlertTs ? tick - new Date(p.lastAnyAlertTs).getTime() : null;
+  const lastActivityAge = riskAge ?? lastAnyAlertAge;
+  const hasAnyHistory = p.riskScoreTs !== null || p.lastAnyAlertTs !== null;
+  const noActivity = hasAnyHistory && lastActivityAge !== null && lastActivityAge > 12 * 60 * 60 * 1000;
+
+  return (
+    <button
+      onClick={() => navigate(`/dashboard/${p.id}`)}
+      className={`group text-left rounded-2xl border overflow-hidden hover:shadow-xl hover:-translate-y-1.5 transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 ${st.card}`}
+      style={{ animationDelay: `${index * 80}ms` }}
+    >
+      <div className={`h-1.5 w-full ${st.bar}`} />
+
+      <div className="p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div className={`size-14 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 ${st.avatar}`}>
+            <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+              <circle cx="18" cy="12" r="6.5" fill="currentColor" opacity="0.72"/>
+              <path d="M4 36 C4 26.6 10.3 21 18 21 C25.7 21 32 26.6 32 36" fill="currentColor" opacity="0.52"/>
+              <line x1="29" y1="22" x2="33" y2="35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.38"/>
+              <path d="M31 22 C31 22 33 21 34 22" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.38"/>
+            </svg>
+          </div>
+          <div className="flex flex-col items-end gap-1.5">
+            <Badge variant="outline" className={`text-xs font-semibold ${st.color}`}>
+              {st.label}
+            </Badge>
+            <span className={`flex items-center gap-1 text-[10px] font-medium ${
+              cameraOnline ? 'text-emerald-500' :
+              cameraUnstable ? 'text-amber-500' :
+              'text-slate-400'
+            }`}>
+              <span className={`size-1.5 rounded-full ${
+                cameraOnline ? 'bg-emerald-400 animate-pulse' :
+                cameraUnstable ? 'bg-amber-400' :
+                'bg-slate-300'
+              }`} />
+              {cameraOnline ? '연결됨' : cameraUnstable ? '연결 불안정' : '오프라인'}
+            </span>
+          </div>
+        </div>
+
+        <p className="text-base font-bold text-slate-800 group-hover:text-blue-800 transition-colors">
+          {p.name}
+        </p>
+        <p className="text-xs text-slate-400 mt-0.5">{p.id}</p>
+        {p.riskScoreTs && (
+          <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${activityRecent ? 'text-emerald-600' : 'text-slate-400'}`}>
+            <span className={`size-1.5 rounded-full shrink-0 ${activityRecent ? 'bg-emerald-400 animate-pulse' : 'bg-slate-300'}`} />
+            {relativeTime(p.riskScoreTs, tick)} 활동 감지됨
+          </p>
+        )}
+
+        {noActivity && (
+          <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-100 px-2.5 py-1.5">
+            <span className="size-1.5 rounded-full bg-amber-400 shrink-0" />
+            <span className="text-[11px] text-amber-600 font-medium">장시간 활동 미감지</span>
+          </div>
+        )}
+
+        {p.riskScore !== null && <RiskGaugeBar score={p.riskScore} />}
+
+        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 text-xs text-slate-400">
+          {p.lastAnyAlertTs ? (
+            <>
+              <Clock className="size-3" />
+              <span>{relativeTime(p.lastAnyAlertTs, tick)}</span>
+            </>
+          ) : cameraOnline ? (
+            <span className="text-emerald-500 font-medium">이상 없음</span>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="px-6 pb-5">
+        <div className="flex items-center gap-1 text-xs text-slate-400 group-hover:text-blue-500 transition-colors">
+          <span>상태 확인</span>
+          <ChevronRight className="size-3.5" />
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -386,107 +495,9 @@ export default function Dashboard() {
               id: p.patient_id, name: p.name, count: 0,
               highestLevel: null, lastAlertTs: null, lastAnyAlertTs: null, riskScore: null,
               riskScoreTs: null, status: p.status,
-            }))).map((p, i) => {
-              const st = elderStatus(p.highestLevel);
-
-              // 카메라/기기 연결 상태
-              const riskAge = p.riskScoreTs ? tick - new Date(p.riskScoreTs).getTime() : null;
-              const cameraOnline   = riskAge !== null && riskAge < 60 * 60 * 1000;
-              const cameraUnstable = !cameraOnline && riskAge !== null && riskAge < 6 * 60 * 60 * 1000;
-              const activityRecent = riskAge !== null && riskAge < 6 * 60 * 60 * 1000;
-
-              // 활동 없음 경고: 데이터가 있는데 12시간 이상 지났을 때만 표시
-              const lastAnyAlertAge = p.lastAnyAlertTs ? tick - new Date(p.lastAnyAlertTs).getTime() : null;
-              const lastActivityAge = riskAge ?? lastAnyAlertAge;
-              const hasAnyHistory = p.riskScoreTs !== null || p.lastAnyAlertTs !== null;
-              const noActivity = hasAnyHistory && lastActivityAge !== null && lastActivityAge > 12 * 60 * 60 * 1000;
-
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => navigate(`/dashboard/${p.id}`)}
-                  className={`group text-left rounded-2xl border overflow-hidden hover:shadow-xl hover:-translate-y-1.5 transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 ${st.card}`}
-                  style={{ animationDelay: `${i * 80}ms` }}
-                >
-                  {/* 상태 색상 바 */}
-                  <div className={`h-1.5 w-full ${st.bar}`} />
-
-                  <div className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className={`size-14 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 ${st.avatar}`}>
-                        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                          {/* 머리 */}
-                          <circle cx="18" cy="12" r="6.5" fill="currentColor" opacity="0.72"/>
-                          {/* 몸통/어깨 */}
-                          <path d="M4 36 C4 26.6 10.3 21 18 21 C25.7 21 32 26.6 32 36" fill="currentColor" opacity="0.52"/>
-                          {/* 지팡이 — 어르신 느낌 */}
-                          <line x1="29" y1="22" x2="33" y2="35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.38"/>
-                          <path d="M31 22 C31 22 33 21 34 22" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.38"/>
-                        </svg>
-                      </div>
-                      <div className="flex flex-col items-end gap-1.5">
-                        <Badge variant="outline" className={`text-xs font-semibold ${st.color}`}>
-                          {st.label}
-                        </Badge>
-                        {/* 카메라 연결 상태 */}
-                        <span className={`flex items-center gap-1 text-[10px] font-medium ${
-                          cameraOnline ? 'text-emerald-500' :
-                          cameraUnstable ? 'text-amber-500' :
-                          'text-slate-400'
-                        }`}>
-                          <span className={`size-1.5 rounded-full ${
-                            cameraOnline ? 'bg-emerald-400 animate-pulse' :
-                            cameraUnstable ? 'bg-amber-400' :
-                            'bg-slate-300'
-                          }`} />
-                          {cameraOnline ? '연결됨' : cameraUnstable ? '연결 불안정' : '오프라인'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <p className="text-base font-bold text-slate-800 group-hover:text-blue-800 transition-colors">
-                      {p.name}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-0.5">{p.id}</p>
-                    {p.riskScoreTs && (
-                      <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${activityRecent ? 'text-emerald-600' : 'text-slate-400'}`}>
-                        <span className={`size-1.5 rounded-full shrink-0 ${activityRecent ? 'bg-emerald-400 animate-pulse' : 'bg-slate-300'}`} />
-                        {relativeTime(p.riskScoreTs, tick)} 활동 감지됨
-                      </p>
-                    )}
-
-                    {/* 활동 없음 경고 */}
-                    {noActivity && (
-                      <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-100 px-2.5 py-1.5">
-                        <span className="size-1.5 rounded-full bg-amber-400 shrink-0" />
-                        <span className="text-[11px] text-amber-600 font-medium">장시간 활동 미감지</span>
-                      </div>
-                    )}
-
-                    {/* 위험 점수 게이지 */}
-                    {p.riskScore !== null && <RiskGaugeBar score={p.riskScore} />}
-
-                    <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 text-xs text-slate-400">
-                      {p.lastAnyAlertTs ? (
-                        <>
-                          <Clock className="size-3" />
-                          <span>{relativeTime(p.lastAnyAlertTs, tick)}</span>
-                        </>
-                      ) : cameraOnline ? (
-                        <span className="text-emerald-500 font-medium">이상 없음</span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="px-6 pb-5">
-                    <div className="flex items-center gap-1 text-xs text-slate-400 group-hover:text-blue-500 transition-colors">
-                      <span>상태 확인</span>
-                      <ChevronRight className="size-3.5" />
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+            }))).map((p, i) => (
+              <PatientCard key={p.id} p={p} tick={tick} index={i} />
+            ))}
           </div>
         )}
         </div>
