@@ -29,13 +29,14 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import type { RiskLevel, AlertLevel, RiskScore, ActionEvent } from '@/types/api';
+import type { RiskLevel, RiskScore, ActionEvent } from '@/types/api';
 import { usePatientEvents } from '@/hooks/usePatientEvents';
 import { eventCategory } from '@/lib/event-labels';
+import type { SeverityCategory } from '@/lib/event-labels';
 import { avgRiskScore, riskLevelFromScore } from '@/lib/risk';
 
-// 알림 분석 차트용 정규화 타입 — 이벤트/알림 공통
-interface AnalysisItem { ts_utc: string; type: string; level: AlertLevel; }
+// 알림 분석 차트용 정규화 타입 — 위험점수 기준 3단계(안전/주의/위험)
+interface AnalysisItem { ts_utc: string; type: string; cat: SeverityCategory; }
 
 // 위험점수 분석 데이터가 없을 때, 최근 액션 이벤트 risk_score 평균으로 추정 (공통 기준 사용)
 function riskFromRecentEvents(events: ActionEvent[], patientId: string): RiskScore | null {
@@ -56,11 +57,12 @@ function riskFromRecentEvents(events: ActionEvent[], patientId: string): RiskSco
 }
 
 function eventToAnalysis(e: ActionEvent): AnalysisItem {
-  const c = eventCategory(e.event_type, e.severity);
-  const level: AlertLevel =
-    c === 'danger' ? 'critical' :
-    c === 'warning' ? 'medium' : 'low';
-  return { ts_utc: e.ts_utc, type: e.event_type, level };
+  // 위험점수(risk_score×5) 기준 분류: 1~2 안전 / 3~4 주의 / 5 위험. 점수 없으면 유형 폴백.
+  const score5 = typeof e.risk_score === 'number' && !Number.isNaN(e.risk_score) ? e.risk_score * 5 : null;
+  const cat: SeverityCategory = score5 != null
+    ? (score5 >= 5 ? 'danger' : score5 >= 3 ? 'warning' : 'safe')
+    : eventCategory(e.event_type, e.severity);
+  return { ts_utc: e.ts_utc, type: e.event_type, cat };
 }
 
 // ── constants ──────────────────────────────────────────────────────────────
@@ -154,7 +156,7 @@ function heatCellClass(count: number): string {
 }
 
 function buildHourlyData(alerts: AnalysisItem[]) {
-  const slots: { hour: number; items: { type: string; level: AlertLevel }[] }[] =
+  const slots: { hour: number; items: { type: string; cat: SeverityCategory }[] }[] =
     Array.from({ length: 24 }, (_, h) => ({ hour: h, items: [] }));
 
   const nowKST = new Date(Date.now() + 9 * 60 * 60 * 1000);
@@ -163,20 +165,20 @@ function buildHourlyData(alerts: AnalysisItem[]) {
   for (const a of alerts) {
     const kst = new Date(new Date(a.ts_utc).getTime() + 9 * 60 * 60 * 1000);
     if (kst.toISOString().slice(0, 10) !== todayStr) continue;
-    slots[kst.getUTCHours()].items.push({ type: a.type, level: a.level });
+    slots[kst.getUTCHours()].items.push({ type: a.type, cat: a.cat });
   }
 
   return slots;
 }
 
 function buildChartData(alerts: AnalysisItem[]) {
-  const entries: { date: string; low: number; medium: number; high: number; critical: number; typeCounts: Record<string, number> }[] = [];
+  const entries: { date: string; safe: number; warning: number; danger: number; typeCounts: Record<string, number> }[] = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     entries.push({
       date: d.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric' }),
-      low: 0, medium: 0, high: 0, critical: 0, typeCounts: {},
+      safe: 0, warning: 0, danger: 0, typeCounts: {},
     });
   }
   for (const alert of alerts) {
@@ -185,7 +187,7 @@ function buildChartData(alerts: AnalysisItem[]) {
     });
     const entry = entries.find(e => e.date === key);
     if (entry) {
-      entry[alert.level]++;
+      entry[alert.cat]++;
       const ko = translateEventType(alert.type);
       entry.typeCounts[ko] = (entry.typeCounts[ko] ?? 0) + 1;
     }
@@ -840,10 +842,9 @@ export default function PatientDetail() {
                       <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
                       <Tooltip content={<ChartTooltip />} />
                       <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                      <Bar dataKey="low"      name="낮음" stackId="a" fill="#86efac" />
-                      <Bar dataKey="medium"   name="중간" stackId="a" fill="#fde047" />
-                      <Bar dataKey="high"     name="높음" stackId="a" fill="#fca5a5" />
-                      <Bar dataKey="critical" name="위험" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="safe"    name="안전" stackId="a" fill="#86efac" />
+                      <Bar dataKey="warning" name="주의" stackId="a" fill="#fde047" />
+                      <Bar dataKey="danger"  name="위험" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : chartTab === 'heatmap' ? (
@@ -905,10 +906,9 @@ export default function PatientDetail() {
                       {hourlyData.map(({ hour, items }) => {
                         const isCurrent = hour === currentHour;
                         const isFuture  = hour > currentHour;
-                        const levelDotCls = (level: AlertLevel) =>
-                          level === 'critical' ? 'bg-red-500 animate-pulse' :
-                          level === 'high'     ? 'bg-orange-400' :
-                          level === 'medium'   ? 'bg-amber-400' : 'bg-emerald-400';
+                        const catDotCls = (cat: SeverityCategory) =>
+                          cat === 'danger'  ? 'bg-red-500 animate-pulse' :
+                          cat === 'warning' ? 'bg-amber-400' : 'bg-emerald-400';
                         return (
                           <div
                             key={hour}
@@ -929,7 +929,7 @@ export default function PatientDetail() {
                               ) : (
                                 items.map((item, i) => (
                                   <div key={i} title={translateEventType(item.type)} className="flex items-center">
-                                    <span className={`size-2.5 rounded-full ${levelDotCls(item.level)}`} />
+                                    <span className={`size-2.5 rounded-full ${catDotCls(item.cat)}`} />
                                   </div>
                                 ))
                               )}
