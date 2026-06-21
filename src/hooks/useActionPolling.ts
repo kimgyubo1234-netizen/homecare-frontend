@@ -34,7 +34,7 @@ export function useActionPolling({
       const data = await apiFetch<ActionEventListResponse>(
         `/api/v1/events?${params}`,
       );
-      const event = data.events?.[0] ?? null;
+      const event = data.items?.[0] ?? null;
 
       failureCountRef.current = 0;
       setIsConnected(true);

@@ -19,11 +19,16 @@ function formatTimeKST(isoStr: string): string {
   });
 }
 
+function toRiskKey(label: string | undefined): RiskLabelKey {
+  if (!label) return 'NORMAL';
+  const upper = label.toUpperCase();
+  if (upper === 'DANGER') return 'DANGER';
+  if (upper === 'SUSPICIOUS' || upper === 'ABNORMAL') return 'ABNORMAL';
+  return 'NORMAL';
+}
+
 export default function ActionOverlayPanel({ event, isConnected, isDelayed }: Props) {
-  const riskKey: RiskLabelKey =
-    event?.risk_label && event.risk_label in RISK_COLOR
-      ? (event.risk_label as RiskLabelKey)
-      : 'NORMAL';
+  const riskKey = toRiskKey(event?.risk_label);
   const colors = RISK_COLOR[riskKey];
 
   // activity 변경 시 fade 애니메이션
@@ -102,7 +107,7 @@ export default function ActionOverlayPanel({ event, isConnected, isDelayed }: Pr
           위험도 {Math.max(1, Math.min(5, Math.round(event.risk_score * 5)))}
         </span>
         <span className="text-[10px] text-slate-400 shrink-0">
-          {formatTimeKST(event.capture_ts)}
+          {formatTimeKST(event.ts_utc)}
         </span>
         {isDelayed && (
           <span className="text-[10px] text-yellow-500 shrink-0" title="데이터 수신 지연">

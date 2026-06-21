@@ -157,14 +157,19 @@ export interface AdminRegisterGuardianResponse {
 export interface ActionEvent {
   id: number;
   patient_id: string;
-  capture_ts: string;
-  analysis_ts: string;
+  device_key: string;
+  event_type: string;
   activity_label: string;
-  risk_label: 'NORMAL' | 'ABNORMAL' | 'DANGER';
+  risk_label: 'normal' | 'suspicious' | 'danger';
   risk_score: number;
-  event_state: string;
+  raw_score: number;
+  confidence: number;
+  severity: number;
+  event_status: string;
+  ts_utc: string;
+  clip_url: string | null;
 }
 
 export interface ActionEventListResponse {
-  events: ActionEvent[];
+  items: ActionEvent[];
 }
