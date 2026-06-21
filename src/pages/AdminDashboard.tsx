@@ -6,7 +6,7 @@ import { useReadStore } from '@/lib/read-store';
 import { usePatientList } from '@/hooks/usePatientList';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useAllEvents } from '@/hooks/useAllEvents';
-import { eventScoreCategory } from '@/lib/event-labels';
+import { eventLevelCategory } from '@/lib/event-labels';
 import type { EventLike } from '@/lib/event-labels';
 import { avgRiskScore, riskLevelFromScore } from '@/lib/risk';
 import { formatKST } from '@/lib/format';
@@ -55,9 +55,9 @@ const levelLabel: Record<string, string> = {
   low:      '안전',
 };
 
-// 이벤트 위험점수 기준 등급 라벨/색상 (다크 테마) — 1~2 안전 / 3~4 주의 / 5 위험
+// 이벤트 유형 기준 등급 라벨/색상 (다크 테마) — 낙상=위험 / 비정상=주의 / 정상=안전
 function eventLevel(e: EventLike): { label: string; bg: string } {
-  const c = eventScoreCategory(e);
+  const c = eventLevelCategory(e);
   if (c === 'danger') return { label: '위험', bg: 'bg-red-500/15 text-red-400' };
   if (c === 'warning') return { label: '주의', bg: 'bg-amber-500/10 text-amber-400' };
   return { label: '안전', bg: 'bg-emerald-500/10 text-emerald-400' };
@@ -213,10 +213,10 @@ export default function AdminDashboard() {
   const totalPatients  = patients.length;
   const dangerPatients = patients.filter(p => patientRisk[p.patient_id]?.level === 'high').length;
   const unreadAlerts   = alerts?.filter(a => !a.is_read && !readIds.includes(a.id)).length ?? 0;
-  // 위험 알림 = 최근 7일 위험점수 기준 위험(5) 이벤트 수 — 알림 분석 차트의 위험과 일치
+  // 위험 알림 = 최근 7일 위험(낙상 등) 감지 이벤트 수 — 최근 감지 목록·차트의 위험과 일치
   const criticalAlerts = allEvents?.filter(e =>
     Date.now() - new Date(e.ts_utc).getTime() < 7 * 24 * 60 * 60 * 1000 &&
-    eventScoreCategory(e) === 'danger'
+    eventLevelCategory(e) === 'danger'
   ).length ?? 0;
 
   function handleLogout() {

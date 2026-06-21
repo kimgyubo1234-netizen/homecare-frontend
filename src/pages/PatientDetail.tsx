@@ -31,7 +31,7 @@ import {
 } from 'recharts';
 import type { RiskLevel, RiskScore, ActionEvent } from '@/types/api';
 import { usePatientEvents } from '@/hooks/usePatientEvents';
-import { eventScoreCategory } from '@/lib/event-labels';
+import { eventLevelCategory } from '@/lib/event-labels';
 import type { SeverityCategory } from '@/lib/event-labels';
 import { avgRiskScore, riskLevelFromScore } from '@/lib/risk';
 
@@ -57,8 +57,8 @@ function riskFromRecentEvents(events: ActionEvent[], patientId: string): RiskSco
 }
 
 function eventToAnalysis(e: ActionEvent): AnalysisItem {
-  // 위험점수(risk_score×5) 기준 분류: 1~2 안전 / 3~4 주의 / 5 위험
-  return { ts_utc: e.ts_utc, type: e.event_type, cat: eventScoreCategory(e) };
+  // 유형 기준 분류: 낙상=위험 / 비정상=주의 / 정상=안전
+  return { ts_utc: e.ts_utc, type: e.event_type, cat: eventLevelCategory(e) };
 }
 
 // ── constants ──────────────────────────────────────────────────────────────
@@ -756,7 +756,7 @@ export default function PatientDetail() {
                     <ul className="space-y-1.5">
                       {(showAllEvents ? recentEventsSorted : recentEventsSorted.slice(0, 5)).map((event, i) => {
                         const EventIcon = getEventIcon(event.event_type);
-                        const sevCat = eventScoreCategory(event);
+                        const sevCat = eventLevelCategory(event);
                         const severityColor =
                           sevCat === 'danger' ? 'bg-red-500' :
                           sevCat === 'warning' ? 'bg-yellow-400' : 'bg-green-400';
