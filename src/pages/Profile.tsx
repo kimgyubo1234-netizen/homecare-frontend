@@ -98,7 +98,7 @@ export default function Profile() {
   const notifItems: { key: keyof Omit<NotifSettings, 'minLevel'>; label: string; desc: string }[] = [
     { key: 'fall',         label: '낙상 감지 알림',      desc: '낙상이 감지되면 즉시 알림을 받습니다' },
     { key: 'inactivity',   label: '장시간 비활동 알림',  desc: '12시간 이상 활동이 없으면 알립니다' },
-    { key: 'riskScore',    label: '위험점수 상승 알림',  desc: '위험점수가 70점 이상으로 오르면 알립니다' },
+    { key: 'riskScore',    label: '위험점수 상승 알림',  desc: '위험점수가 4점 이상(5점 만점)으로 오르면 알립니다' },
     { key: 'dailyReport',  label: '일일 안전 리포트',    desc: '매일 오전 8시에 전날 요약 리포트를 받습니다' },
   ];
 
