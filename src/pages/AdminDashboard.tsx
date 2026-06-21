@@ -51,7 +51,7 @@ const levelLabel: Record<string, string> = {
   critical: '위험',
   high:     '위험',
   medium:   '주의',
-  low:      '양호',
+  low:      '안전',
 };
 
 // 이벤트 유형 기준 등급 라벨/색상 (다크 테마) — 낙상=위험, 비정상=주의, 정상=안전

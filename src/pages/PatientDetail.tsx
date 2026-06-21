@@ -84,9 +84,9 @@ const riskStrokeColor: Record<RiskLevel, string> = {
 };
 
 const riskLevelLabel: Record<RiskLevel, string> = {
-  high: '높음',
-  medium: '중간',
-  low: '낮음',
+  high: '위험',
+  medium: '주의',
+  low: '안전',
 };
 
 
@@ -531,7 +531,7 @@ export default function PatientDetail() {
                 variant="outline"
                 className={`border-white/30 bg-white/10 text-white ${riskLevel === 'high' ? 'animate-pulse' : ''}`}
               >
-                위험도 {riskLevelLabel[riskLevel]}
+위험도 · {riskLevelLabel[riskLevel]}
               </Badge>
             )}
           </div>
@@ -947,7 +947,7 @@ export default function PatientDetail() {
                       {[
                         { cls: 'bg-red-500', label: '위험' },
                         { cls: 'bg-amber-400', label: '주의' },
-                        { cls: 'bg-emerald-400', label: '양호' },
+                        { cls: 'bg-emerald-400', label: '안전' },
                         { cls: 'bg-slate-200', label: '없음' },
                       ].map(({ cls, label }) => (
                         <span key={label} className="flex items-center gap-1 text-[10px] text-slate-400">

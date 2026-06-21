@@ -91,7 +91,7 @@ function elderStatus(level: AlertLevel | null) {
     card: 'border-amber-300 bg-amber-50/60 hover:border-amber-500',
   };
   return {
-    label: '양호',
+    label: '안전',
     color: 'text-green-600 bg-green-50 border-green-200',
     avatar: 'bg-green-100 text-green-700',
     bar: 'bg-green-400',
