@@ -29,12 +29,30 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import type { RiskLevel, AlertLevel, EventItem, RiskScore } from '@/types/api';
+import type { RiskLevel, AlertLevel, EventItem, RiskScore, ActionEvent } from '@/types/api';
 import { usePatientEvents } from '@/hooks/usePatientEvents';
 import { eventCategory } from '@/lib/event-labels';
 
 // 알림 분석 차트용 정규화 타입 — 이벤트/알림 공통
 interface AnalysisItem { ts_utc: string; type: string; level: AlertLevel; }
+
+// 위험점수 분석 데이터가 없을 때, 실시간 액션 이벤트의 risk_score로 추정 점수 생성
+function riskFromActionEvent(e: ActionEvent, patientId: string): RiskScore {
+  const score = Math.min(5, Math.max(0, e.risk_score * 5));
+  const risk_level: RiskLevel =
+    e.risk_label === 'danger' ? 'high' :
+    e.risk_label === 'suspicious' ? 'medium' : 'low';
+  return {
+    id: e.id,
+    patient_id: patientId,
+    score,
+    risk_level,
+    reason: '실시간 행동 분석 기반 추정치',
+    analyzed_from_utc: null,
+    analyzed_to_utc: null,
+    created_at_utc: e.ts_utc,
+  };
+}
 
 function eventToAnalysis(e: EventItem): AnalysisItem {
   const c = eventCategory(e.event_type, e.severity);
@@ -377,20 +395,23 @@ export default function PatientDetail() {
     ? patients![currentIndex + 1]
     : null;
 
-  // 최신 위험점수 — 대시보드 우선, 없으면 환자 목록의 최신 점수로 폴백
+  // 최신 위험점수 — ①대시보드 ②환자 목록 ③실시간 액션 이벤트(추정) 순으로 폴백
   const listItem = patients?.find(p => p.patient_id === patientId);
-  const latestRisk: RiskScore | null = dashboard?.latest_risk ?? (listItem?.latest_risk_score
-    ? {
-        id: listItem.latest_risk_score.id,
-        patient_id: patientId,
-        score: listItem.latest_risk_score.score,
-        risk_level: listItem.latest_risk_score.risk_level,
-        reason: '',
-        analyzed_from_utc: null,
-        analyzed_to_utc: null,
-        created_at_utc: listItem.latest_risk_score.created_at_utc,
-      }
-    : null);
+  const latestRisk: RiskScore | null =
+    dashboard?.latest_risk
+    ?? (listItem?.latest_risk_score
+      ? {
+          id: listItem.latest_risk_score.id,
+          patient_id: patientId,
+          score: listItem.latest_risk_score.score,
+          risk_level: listItem.latest_risk_score.risk_level,
+          reason: '',
+          analyzed_from_utc: null,
+          analyzed_to_utc: null,
+          created_at_utc: listItem.latest_risk_score.created_at_utc,
+        }
+      : null)
+    ?? (latestEvent ? riskFromActionEvent(latestEvent, patientId) : null);
 
   // 히어로 변수
   const riskLevel     = latestRisk?.risk_level;
