@@ -31,15 +31,16 @@ import {
 } from 'recharts';
 import type { RiskLevel, AlertLevel, EventItem, RiskScore } from '@/types/api';
 import { usePatientEvents } from '@/hooks/usePatientEvents';
+import { severityCategory } from '@/lib/event-labels';
 
 // 알림 분석 차트용 정규화 타입 — 이벤트/알림 공통
 interface AnalysisItem { ts_utc: string; type: string; level: AlertLevel; }
 
 function eventToAnalysis(e: EventItem): AnalysisItem {
+  const c = severityCategory(e.severity);
   const level: AlertLevel =
-    e.severity >= 4 ? 'critical' :
-    e.severity === 3 ? 'high' :
-    e.severity === 2 ? 'medium' : 'low';
+    c === 'danger' ? 'critical' :
+    c === 'warning' ? 'medium' : 'low';
   return { ts_utc: e.ts_utc, type: e.event_type, level };
 }
 
@@ -83,8 +84,9 @@ function relativeTime(ts: string): string {
 }
 
 function severityBorderClass(severity: number): string {
-  if (severity >= 3) return 'border-l-2 border-red-400 pl-2';
-  if (severity === 2) return 'border-l-2 border-yellow-400 pl-2';
+  const c = severityCategory(severity);
+  if (c === 'danger') return 'border-l-2 border-red-400 pl-2';
+  if (c === 'warning') return 'border-l-2 border-yellow-400 pl-2';
   return 'border-l-2 border-green-400 pl-2';
 }
 
@@ -742,9 +744,10 @@ export default function PatientDetail() {
                     <ul className="space-y-1.5">
                       {(showAllEvents ? dashboard.recent_events : dashboard.recent_events.slice(0, 5)).map((event, i) => {
                         const EventIcon = getEventIcon(event.event_type);
+                        const sevCat = severityCategory(event.severity);
                         const severityColor =
-                          event.severity >= 3 ? 'bg-red-500' :
-                          event.severity === 2 ? 'bg-yellow-400' : 'bg-green-400';
+                          sevCat === 'danger' ? 'bg-red-500' :
+                          sevCat === 'warning' ? 'bg-yellow-400' : 'bg-green-400';
                         return (
                           <li
                             key={event.id}

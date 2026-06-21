@@ -280,8 +280,9 @@ export default function Dashboard() {
       const recentMaxSev = pe
         .filter(e => now - new Date(e.ts_utc).getTime() < 24 * 60 * 60 * 1000)
         .reduce((m, e) => Math.max(m, e.severity), 0);
+      // severity 약 0~10 스케일: 7 이상 위험 / 3~6 주의
       const eventLevel: AlertLevel | null =
-        recentMaxSev >= 3 ? 'high' : recentMaxSev === 2 ? 'medium' : null;
+        recentMaxSev >= 7 ? 'high' : recentMaxSev >= 3 ? 'medium' : null;
       const riskLvl = p.latest_risk_score?.risk_level ?? null;
       const riskAsAlert: AlertLevel | null =
         riskLvl === 'high' ? 'high' : riskLvl === 'medium' ? 'medium' : null;
