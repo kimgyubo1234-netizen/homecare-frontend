@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { X, Bell, ChevronRight } from 'lucide-react';
-import { useAlerts } from '@/hooks/useAlerts';
+import { useAllEvents } from '@/hooks/useAllEvents';
 import { usePatientList } from '@/hooks/usePatientList';
 import { formatKST } from '@/lib/format';
-import { useReadStore } from '@/lib/read-store';
+import { translateEventType, eventSeverityDot, eventSeverityBadge } from '@/lib/event-labels';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { AlertLevel } from '@/types/api';
 
-type Filter = 'all' | 'unread' | 'critical';
+type Filter = 'all' | 'today' | 'danger';
 
 interface Props {
   open: boolean;
@@ -26,40 +25,11 @@ function relativeTime(ts: string): string {
   return `${Math.floor(hours / 24)}일 전`;
 }
 
-const levelBadge: Record<AlertLevel, string> = {
-  critical: 'bg-red-50 text-red-600 border-red-200',
-  high:     'bg-red-50 text-red-500 border-red-100',
-  medium:   'bg-amber-50 text-amber-600 border-amber-200',
-  low:      'bg-emerald-50 text-emerald-600 border-emerald-200',
-};
-
-const levelLabel: Record<AlertLevel, string> = {
-  critical: '위험',
-  high:     '위험',
-  medium:   '주의',
-  low:      '양호',
-};
-
-const levelDot: Record<AlertLevel, string> = {
-  critical: 'bg-red-500 animate-pulse',
-  high:     'bg-red-400',
-  medium:   'bg-amber-400',
-  low:      'bg-emerald-400',
-};
-
 export default function AlertPanel({ open, onClose }: Props) {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
-  const { data: allAlerts, isLoading } = useAlerts({ days: 30 });
+  const { data: allEvents, isLoading } = useAllEvents(200);
   const { data: patients } = usePatientList();
-  const markRead = useReadStore((s) => s.markRead);
-  const readIds = useReadStore((s) => s.readIds);
-
-  function handleAlertClick(patientId: string, alertId: number) {
-    markRead([alertId]);
-    navigate(`/dashboard/${patientId}`);
-    onClose();
-  }
 
   const patientMap = useMemo(() => {
     if (!patients) return {} as Record<string, string>;
@@ -67,15 +37,27 @@ export default function AlertPanel({ open, onClose }: Props) {
   }, [patients]);
 
   const filtered = useMemo(() => {
-    if (!allAlerts) return [];
-    return allAlerts
-      .filter(a => {
-        if (filter === 'unread')   return !a.is_read && !readIds.includes(a.id);
-        if (filter === 'critical') return a.level === 'critical' || a.level === 'high';
+    if (!allEvents) return [];
+    const now = Date.now();
+    return [...allEvents]
+      .filter(e => {
+        if (filter === 'today')  return now - new Date(e.ts_utc).getTime() < 24 * 60 * 60 * 1000;
+        if (filter === 'danger') return e.severity >= 3;
         return true;
       })
+      .sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())
       .slice(0, 50);
-  }, [allAlerts, filter]);
+  }, [allEvents, filter]);
+
+  const todayCount = useMemo(() => {
+    if (!allEvents) return 0;
+    const now = Date.now();
+    return allEvents.filter(e => now - new Date(e.ts_utc).getTime() < 24 * 60 * 60 * 1000).length;
+  }, [allEvents]);
+
+  const dangerCount = useMemo(() => {
+    return allEvents?.filter(e => e.severity >= 3).length ?? 0;
+  }, [allEvents]);
 
   useEffect(() => {
     if (!open) return;
@@ -89,13 +71,10 @@ export default function AlertPanel({ open, onClose }: Props) {
     return () => { document.body.style.overflow = ''; };
   }, [open]);
 
-  const unreadCount   = allAlerts?.filter(a => !a.is_read && !readIds.includes(a.id)).length ?? 0;
-  const criticalCount = allAlerts?.filter(a => a.level === 'critical' || a.level === 'high').length ?? 0;
-
   const FILTERS: { key: Filter; label: string; count: number }[] = [
-    { key: 'all',      label: '전체',   count: allAlerts?.length ?? 0 },
-    { key: 'unread',   label: '미확인', count: unreadCount },
-    { key: 'critical', label: '위험',   count: criticalCount },
+    { key: 'all',    label: '전체', count: allEvents?.length ?? 0 },
+    { key: 'today',  label: '오늘', count: todayCount },
+    { key: 'danger', label: '위험', count: dangerCount },
   ];
 
   return (
@@ -118,10 +97,10 @@ export default function AlertPanel({ open, onClose }: Props) {
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <div className="flex items-center gap-2.5">
             <Bell className="size-4 text-blue-600" />
-            <h2 className="text-sm font-bold text-slate-800">알림</h2>
-            {unreadCount > 0 && (
-              <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                {unreadCount > 99 ? '99+' : unreadCount}
+            <h2 className="text-sm font-bold text-slate-800">감지 이력</h2>
+            {todayCount > 0 && (
+              <span className="rounded-full bg-blue-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                오늘 {todayCount}건
               </span>
             )}
           </div>
@@ -152,7 +131,7 @@ export default function AlertPanel({ open, onClose }: Props) {
                 <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
                   filter === key
                     ? 'bg-white/30 text-white'
-                    : key === 'critical'
+                    : key === 'danger'
                     ? 'bg-red-100 text-red-600'
                     : 'bg-slate-200 text-slate-500'
                 }`}>
@@ -163,7 +142,7 @@ export default function AlertPanel({ open, onClose }: Props) {
           ))}
         </div>
 
-        {/* 알림 목록 */}
+        {/* 이벤트 목록 */}
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="space-y-3 p-4">
@@ -175,27 +154,26 @@ export default function AlertPanel({ open, onClose }: Props) {
             <div className="flex h-48 flex-col items-center justify-center gap-3">
               <Bell className="size-8 text-slate-200" />
               <p className="text-sm text-slate-400">
-                {filter === 'unread'   ? '미확인 알림이 없습니다' :
-                 filter === 'critical' ? '위험 알림이 없습니다'   :
-                 '알림이 없습니다'}
+                {filter === 'today'  ? '오늘 감지된 이벤트가 없습니다' :
+                 filter === 'danger' ? '위험 이벤트가 없습니다' :
+                 '감지된 이벤트가 없습니다'}
               </p>
             </div>
           ) : (
             <ul className="divide-y divide-slate-50">
-              {filtered.map(alert => {
-                const name = patientMap[alert.patient_id] ?? alert.patient_id;
-                const isNew = !alert.is_read && !readIds.includes(alert.id);
+              {filtered.map(event => {
+                const name = patientMap[event.patient_id] ?? event.patient_id;
+                const dot = eventSeverityDot(event.severity);
+                const badge = eventSeverityBadge(event.severity);
                 return (
-                  <li key={alert.id}>
+                  <li key={event.id}>
                     <button
                       type="button"
-                      onClick={() => handleAlertClick(alert.patient_id, alert.id)}
-                      className={`w-full text-left px-5 py-4 transition-colors hover:bg-slate-50 ${
-                        isNew ? 'bg-blue-50/40' : ''
-                      }`}
+                      onClick={() => { navigate(`/dashboard/${event.patient_id}`); onClose(); }}
+                      className="w-full text-left px-5 py-4 transition-colors hover:bg-slate-50"
                     >
                       <div className="flex items-start gap-3">
-                        <span className={`mt-1.5 size-2 shrink-0 rounded-full ${levelDot[alert.level]}`} />
+                        <span className={`mt-1.5 size-2 shrink-0 rounded-full ${dot}`} />
                         <div className="min-w-0 flex-1">
                           <div className="mb-0.5 flex items-center justify-between gap-2">
                             <span className="truncate text-xs font-semibold text-slate-800">
@@ -203,27 +181,17 @@ export default function AlertPanel({ open, onClose }: Props) {
                             </span>
                             <span
                               className="shrink-0 text-[10px] text-slate-400"
-                              title={formatKST(alert.ts_utc)}
+                              title={formatKST(event.ts_utc)}
                             >
-                              {relativeTime(alert.ts_utc)}
+                              {relativeTime(event.ts_utc)}
                             </span>
                           </div>
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <Badge variant="outline" className={`py-0 text-[10px] ${levelBadge[alert.level]}`}>
-                              {levelLabel[alert.level]}
+                            <Badge variant="outline" className={`py-0 text-[10px] ${badge.color}`}>
+                              {badge.label}
                             </Badge>
-                            <span className="text-xs text-slate-500">{alert.alert_type}</span>
-                            {isNew && (
-                              <span className="rounded-full bg-blue-500 px-1.5 py-0.5 text-[9px] font-bold leading-none text-white">
-                                NEW
-                              </span>
-                            )}
+                            <span className="text-xs text-slate-500">{translateEventType(event.event_type)}</span>
                           </div>
-                          {alert.message && (
-                            <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-slate-400">
-                              {alert.message}
-                            </p>
-                          )}
                         </div>
                       </div>
                     </button>
@@ -241,7 +209,7 @@ export default function AlertPanel({ open, onClose }: Props) {
             onClick={onClose}
             className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:border-blue-300 hover:bg-slate-50 hover:text-blue-600"
           >
-            전체 알림 히스토리 보기
+            전체 이벤트 이력 보기
             <ChevronRight className="size-4" />
           </Link>
         </div>

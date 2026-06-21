@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { Bell, LogOut, LayoutDashboard } from 'lucide-react';
 import { useAuthStore, useAuthUser } from '@/lib/auth-store';
-import { useAlerts } from '@/hooks/useAlerts';
-import { useReadStore } from '@/lib/read-store';
+import { useAllEvents } from '@/hooks/useAllEvents';
 import SseProvider from '@/components/SseProvider';
 import OnboardingTour from '@/components/OnboardingTour';
 import AlertPanel from '@/components/AlertPanel';
@@ -12,24 +11,21 @@ export default function HomeLayout() {
   const navigate = useNavigate();
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const user = useAuthUser();
-  const { data: alerts } = useAlerts();
-  const markRead = useReadStore((s) => s.markRead);
-  const readIds = useReadStore((s) => s.readIds);
-  const unreadCount = alerts?.filter(a => !a.is_read && !readIds.includes(a.id)).length ?? 0;
+  const { data: allEvents } = useAllEvents(200);
   const [panelOpen, setPanelOpen] = useState(false);
 
-  // 패널 열릴 때 전체 읽음 처리
-  useEffect(() => {
-    if (!panelOpen || !alerts) return;
-    const unreadIds = alerts.filter(a => !a.is_read).map(a => a.id);
-    if (unreadIds.length > 0) markRead(unreadIds);
-  }, [panelOpen, alerts, markRead]);
+  // 오늘(24시간 이내) 이벤트 수를 배지로 표시
+  const todayCount = useMemo(() => {
+    if (!allEvents) return 0;
+    const now = Date.now();
+    return allEvents.filter(e => now - new Date(e.ts_utc).getTime() < 24 * 60 * 60 * 1000).length;
+  }, [allEvents]);
 
   useEffect(() => {
-    document.title = unreadCount > 0
-      ? `(${unreadCount}) 어르신 안전 돌봄 서비스`
+    document.title = todayCount > 0
+      ? `(${todayCount}) 어르신 안전 돌봄 서비스`
       : '어르신 안전 돌봄 서비스';
-  }, [unreadCount]);
+  }, [todayCount]);
 
   const handleLogout = () => {
     clearAuth();
@@ -76,9 +72,9 @@ export default function HomeLayout() {
             >
               <Bell className="size-4" />
               알림
-              {unreadCount > 0 && (
-                <span className="absolute -top-2.5 -right-3.5 min-w-[18px] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">
-                  {unreadCount > 99 ? '99+' : unreadCount}
+              {todayCount > 0 && (
+                <span className="absolute -top-2.5 -right-3.5 min-w-[18px] rounded-full bg-blue-500 px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">
+                  {todayCount > 99 ? '99+' : todayCount}
                 </span>
               )}
             </button>

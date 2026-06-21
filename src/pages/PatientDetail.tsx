@@ -378,10 +378,14 @@ const { data: patients }       = usePatientList();
   const cameraColor   = cameraOnline ? 'text-emerald-300' : cameraUnstable ? 'text-amber-300' : 'text-slate-400';
   const cameraDot     = cameraOnline ? 'bg-emerald-400 animate-pulse' : cameraUnstable ? 'bg-amber-400' : 'bg-slate-400';
 
-  // 마지막 알림
+  // 마지막 감지 — 이벤트 우선, 없으면 알림 기준
+  const lastEventTs = dashboard?.recent_events && dashboard.recent_events.length > 0
+    ? [...dashboard.recent_events].sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())[0].ts_utc
+    : null;
   const lastAlertTs = patientAlerts && patientAlerts.length > 0
     ? [...patientAlerts].sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())[0].ts_utc
     : null;
+  const lastActivityTs = lastEventTs ?? lastAlertTs;
 
   const hourlyData = useMemo(
     () => buildHourlyData(patientAlerts ?? []),
@@ -499,12 +503,12 @@ const { data: patients }       = usePatientList();
                   </div>
                   <p className="text-xs text-white/55 mt-0.5">카메라</p>
                 </div>
-                {/* 마지막 알림 */}
+                {/* 마지막 감지 */}
                 <div className="px-7 py-3 text-center">
                   <p className="text-sm font-bold">
-                    {lastAlertTs ? relativeTime(lastAlertTs) : '이상 없음'}
+                    {lastActivityTs ? relativeTime(lastActivityTs) : '이상 없음'}
                   </p>
-                  <p className="text-xs text-white/55 mt-0.5">마지막 알림</p>
+                  <p className="text-xs text-white/55 mt-0.5">마지막 감지</p>
                 </div>
               </div>
 
