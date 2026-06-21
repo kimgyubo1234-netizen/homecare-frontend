@@ -9,7 +9,7 @@ interface AlertFilters {
   days?: number;
 }
 
-export function useAlerts({ patientId, source, levels, days = 7 }: AlertFilters = {}) {
+export function useAlerts({ patientId, source, levels, days = 90 }: AlertFilters = {}) {
   return useQuery({
     queryKey: ['alerts', patientId ?? '', source ?? '', days],
     queryFn: async (): Promise<AlertListResponse> => {
