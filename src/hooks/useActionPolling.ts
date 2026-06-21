@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import type { ActionEvent, ActionEventListResponse } from '@/types/api';
 
@@ -26,41 +26,45 @@ export function useActionPolling({
   const [isDelayed, setIsDelayed] = useState(false);
 
   const failureCountRef = useRef(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const poll = useCallback(async () => {
-    try {
-      const params = new URLSearchParams({ patient_id: patientId, limit: '1' });
-      const data = await apiFetch<ActionEventListResponse>(
-        `/api/v1/events?${params}`,
-      );
-      const event = data.items?.[0] ?? null;
-
-      failureCountRef.current = 0;
-      setIsConnected(true);
-
-      if (event) {
-        setLatestEvent(event);
-        const age = Date.now() - new Date(event.ts_utc).getTime();
-        setIsDelayed(age > delayThresholdMs);
-      }
-    } catch {
-      failureCountRef.current += 1;
-      if (failureCountRef.current >= FAILURE_LIMIT) {
-        setIsConnected(false);
-      }
-    }
-  }, [patientId, delayThresholdMs]);
 
   useEffect(() => {
-    // 마운트 즉시 1회 실행 후 인터벌 시작
+    let active = true;
+
+    async function poll() {
+      if (!active) return;
+      try {
+        const params = new URLSearchParams({ patient_id: patientId, limit: '1' });
+        const data = await apiFetch<ActionEventListResponse>(`/api/v1/events?${params}`);
+        const event = data.items?.[0] ?? null;
+
+        if (!active) return;
+        failureCountRef.current = 0;
+        setIsConnected(true);
+
+        if (event) {
+          setLatestEvent(event);
+          const age = Date.now() - new Date(event.ts_utc).getTime();
+          setIsDelayed(age > delayThresholdMs);
+        }
+      } catch {
+        if (!active) return;
+        failureCountRef.current += 1;
+        if (failureCountRef.current >= FAILURE_LIMIT) {
+          setIsConnected(false);
+        }
+      }
+
+      if (active) {
+        setTimeout(poll, intervalMs);
+      }
+    }
+
     poll();
-    intervalRef.current = setInterval(poll, intervalMs);
 
     return () => {
-      if (intervalRef.current !== null) clearInterval(intervalRef.current);
+      active = false;
     };
-  }, [poll, intervalMs]);
+  }, [patientId, intervalMs, delayThresholdMs]);
 
   return { latestEvent, isConnected, isDelayed };
 }
