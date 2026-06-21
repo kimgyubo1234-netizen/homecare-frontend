@@ -571,7 +571,7 @@ const { data: patients }       = usePatientList();
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-semibold">어르신 정보</CardTitle>
-                  {dashboard?.patient.status === 'active' && (
+                  {!isGuardian && dashboard?.patient.status === 'active' && (
                     <span className="flex items-center gap-1.5 text-xs text-green-600">
                       <span className="size-1.5 rounded-full bg-green-500 animate-pulse" />
                       관리자 모니터링 사용중
