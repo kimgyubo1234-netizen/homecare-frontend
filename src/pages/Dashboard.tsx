@@ -274,7 +274,21 @@ export default function Dashboard() {
       const allPa = allAlerts?.filter(a => a.patient_id === p.patient_id) ?? [];
       const pe = allEvents?.filter(e => e.patient_id === p.patient_id) ?? [];
       const alertHighestLevel = levels.find(l => pa.some(a => a.level === l)) ?? null;
-      const highestLevel = alertHighestLevel;
+
+      // 카드 등급 = 미읽음 알림 · 위험점수 · 최근 24시간 감지 이벤트 중 최고 등급
+      const now = Date.now();
+      const recentMaxSev = pe
+        .filter(e => now - new Date(e.ts_utc).getTime() < 24 * 60 * 60 * 1000)
+        .reduce((m, e) => Math.max(m, e.severity), 0);
+      const eventLevel: AlertLevel | null =
+        recentMaxSev >= 3 ? 'high' : recentMaxSev === 2 ? 'medium' : null;
+      const riskLvl = p.latest_risk_score?.risk_level ?? null;
+      const riskAsAlert: AlertLevel | null =
+        riskLvl === 'high' ? 'high' : riskLvl === 'medium' ? 'medium' : null;
+      const rank: Record<AlertLevel, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+      const highestLevel = [alertHighestLevel, eventLevel, riskAsAlert]
+        .filter((l): l is AlertLevel => l !== null)
+        .sort((a, b) => rank[a] - rank[b])[0] ?? null;
       const lastAlertTs = pa.length > 0
         ? pa.reduce((a, b) => new Date(a.ts_utc) > new Date(b.ts_utc) ? a : b).ts_utc
         : null;
@@ -315,7 +329,6 @@ export default function Dashboard() {
   const totalPatients  = patients?.length ?? 0;
   const unreadAlerts   = allAlerts?.filter(a => !a.is_read && !readIds.includes(a.id)).length ?? 0;
   const criticalAlerts = allAlerts?.filter(a => a.level === 'critical' || a.level === 'high').length ?? 0;
-  const criticalUnread = allAlerts?.filter(a => (a.level === 'critical' || a.level === 'high') && !a.is_read && !readIds.includes(a.id)).length ?? 0;
   const isLoading      = isPatientsLoading || isAlertsLoading;
 
   const tick           = useNow();
@@ -323,9 +336,10 @@ export default function Dashboard() {
   const countUnread    = useCountUp(isLoading ? 0 : unreadAlerts);
   const countCritical  = useCountUp(isLoading ? 0 : criticalAlerts);
 
-  const overallStatus = criticalUnread > 0
+  // 영웅 상태 = 어르신 카드 등급(알림·위험점수·최근 감지 통합) 중 최고 등급 기준
+  const overallStatus = (patientStats?.some(p => p.highestLevel === 'critical' || p.highestLevel === 'high'))
     ? 'critical'
-    : (allAlerts?.some(a => a.level === 'medium' && !a.is_read && !readIds.includes(a.id)) ? 'warning' : 'safe');
+    : (patientStats?.some(p => p.highestLevel === 'medium') ? 'warning' : 'safe');
 
   const heroGradient = overallStatus === 'critical'
     ? 'from-red-900 via-red-800 to-rose-900'
@@ -338,8 +352,8 @@ export default function Dashboard() {
       Icon: CheckCircle2,
       iconClass: 'text-emerald-400',
       bgClass: 'bg-emerald-400/20',
-      message: '모든 어르신이 안전합니다',
-      sub: '현재 이상 징후가 감지되지 않았습니다',
+      message: '현재 위험 알림이 없습니다',
+      sub: '모든 어르신이 안정적인 상태입니다',
     },
     warning: {
       Icon: AlertCircle,
@@ -352,7 +366,7 @@ export default function Dashboard() {
       Icon: XCircle,
       iconClass: 'text-red-300',
       bgClass: 'bg-red-400/20',
-      message: '위험 알림이 발생했습니다',
+      message: '위험 상황이 감지되었습니다',
       sub: '즉시 확인이 필요합니다',
     },
   }[overallStatus];
