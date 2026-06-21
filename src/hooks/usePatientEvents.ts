@@ -15,6 +15,7 @@ export function usePatientEvents(patientId: string, limit = 200) {
     enabled: !!patientId,
     staleTime: 10 * 1000,
     refetchInterval: 15 * 1000,
+    refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
   });
 }

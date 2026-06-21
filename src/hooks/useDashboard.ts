@@ -12,6 +12,7 @@ export function useDashboard(patientId: string) {
     enabled: !!patientId,
     staleTime: 10 * 1000,
     refetchInterval: 15 * 1000,
+    refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
   });
 }

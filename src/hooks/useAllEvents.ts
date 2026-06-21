@@ -12,6 +12,7 @@ export function useAllEvents(limit = 50) {
     },
     staleTime: 10 * 1000,
     refetchInterval: 15 * 1000,
+    refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
   });
 }

@@ -9,6 +9,7 @@ export function usePatientList() {
     select: (data): PatientListItem[] => data.patients,
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
+    refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
   });
 }

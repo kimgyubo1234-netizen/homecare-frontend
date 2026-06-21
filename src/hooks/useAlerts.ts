@@ -24,6 +24,7 @@ export function useAlerts({ patientId, source, levels, days = 90 }: AlertFilters
     },
     staleTime: 10 * 1000,
     refetchInterval: 20 * 1000,
+    refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
   });
 }
