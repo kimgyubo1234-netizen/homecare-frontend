@@ -6,6 +6,7 @@ import { useAllEvents } from '@/hooks/useAllEvents';
 import { usePatientList } from '@/hooks/usePatientList';
 import { ForbiddenError } from '@/lib/api';
 import { useReadStore } from '@/lib/read-store';
+import { useSeenStore } from '@/lib/seen-store';
 import { formatKST } from '@/lib/format';
 import { translateEventType, eventSeverityDot, eventSeverityBadge } from '@/lib/event-labels';
 import {
@@ -125,8 +126,13 @@ export default function Alerts() {
   const [toggled, setToggled] = useState<Set<number>>(new Set());
   const markRead = useReadStore((s) => s.markRead);
   const readIds = useReadStore((s) => s.readIds);
+  const markSeen = useSeenStore((s) => s.markSeen);
 
-  // 페이지 열리면 미읽음 알림 전체 읽음 처리
+  // 페이지 열리면 미읽음 알림 전체 읽음 처리 + 벨 배지(이벤트) 확인 처리
+  useEffect(() => {
+    markSeen();
+  }, [markSeen]);
+
   useEffect(() => {
     if (!alerts) return;
     const unreadIds = alerts.filter(a => !a.is_read).map(a => a.id);
@@ -167,6 +173,7 @@ export default function Alerts() {
     if (!alerts) return;
     const unreadIds = alerts.filter(a => !resolveRead(a)).map(a => a.id);
     markRead(unreadIds);
+    markSeen();
     setToggled(new Set());
   }
 
