@@ -748,7 +748,7 @@ export default function PatientDetail() {
                       {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-8" />)}
                     </div>
                   ) : recentEventsSorted.length > 0 ? (
-                    <ul className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
+                    <ul className="space-y-1.5 max-h-[260px] overflow-y-auto overflow-x-hidden pr-1">
                       {recentEventsSorted.map((event, i) => {
                         const EventIcon = getEventIcon(event.event_type);
                         const sevCat = eventLevelCategory(event);
