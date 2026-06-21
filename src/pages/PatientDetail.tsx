@@ -576,7 +576,7 @@ const { data: patients }       = usePatientList();
                   {dashboard?.patient.status === 'active' && (
                     <span className="flex items-center gap-1.5 text-xs text-green-600">
                       <span className="size-1.5 rounded-full bg-green-500 animate-pulse" />
-                      모니터링 중
+                      관리자 모니터링 사용중
                     </span>
                   )}
                 </div>
