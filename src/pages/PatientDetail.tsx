@@ -488,13 +488,6 @@ const { data: patients }       = usePatientList();
           ) : (
             <div className="flex justify-center gap-3 flex-wrap">
               <div className="flex divide-x divide-white/15 rounded-2xl border border-white/15 bg-white/10 backdrop-blur-sm overflow-hidden">
-                {/* 위험점수 */}
-                <div className="px-7 py-3 text-center">
-                  <p className="text-2xl font-extrabold tabular-nums">
-                    {dashboard?.latest_risk?.score?.toFixed(1) ?? '–'}
-                  </p>
-                  <p className="text-xs text-white/55 mt-0.5">위험점수</p>
-                </div>
                 {/* 카메라 */}
                 <div className="px-7 py-3 text-center">
                   <div className={`flex items-center justify-center gap-1.5 text-sm font-bold ${cameraColor}`}>
