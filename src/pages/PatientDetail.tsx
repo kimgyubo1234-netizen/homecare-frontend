@@ -29,32 +29,54 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import type { RiskLevel, AlertLevel, EventItem, RiskScore, ActionEvent } from '@/types/api';
+import type { RiskLevel, AlertLevel, RiskScore, ActionEvent } from '@/types/api';
 import { usePatientEvents } from '@/hooks/usePatientEvents';
 import { eventCategory } from '@/lib/event-labels';
 
 // 알림 분석 차트용 정규화 타입 — 이벤트/알림 공통
 interface AnalysisItem { ts_utc: string; type: string; level: AlertLevel; }
 
-// 위험점수 분석 데이터가 없을 때, 실시간 액션 이벤트의 risk_score로 추정 점수 생성
-function riskFromActionEvent(e: ActionEvent, patientId: string): RiskScore {
-  const score = Math.min(5, Math.max(0, e.risk_score * 5));
-  const risk_level: RiskLevel =
-    e.risk_label === 'danger' ? 'high' :
-    e.risk_label === 'suspicious' ? 'medium' : 'low';
+function riskLevelFromScore5(score: number): RiskLevel {
+  if (score >= 5) return 'high';     // 위험
+  if (score >= 3) return 'medium';   // 주의
+  return 'low';                       // 안전 (1~2)
+}
+
+// 위험점수 분석 데이터가 없을 때, 최근 액션 이벤트들의 risk_score 평균으로 추정.
+//   1순위: 최근 5분 이내 이벤트 / 없으면 최근 10건
+function riskFromRecentEvents(events: ActionEvent[], patientId: string): RiskScore | null {
+  if (!events || events.length === 0) return null;
+  const now = Date.now();
+  const windowMs = 5 * 60 * 1000;
+  let window = events.filter(e => now - new Date(e.ts_utc).getTime() <= windowMs);
+  if (window.length === 0) {
+    window = [...events]
+      .sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())
+      .slice(0, 10);
+  }
+  const scores = window
+    .map(e => e.risk_score)
+    .filter((s): s is number => typeof s === 'number' && !Number.isNaN(s));
+  if (scores.length === 0) return null;
+
+  const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+  const score = Math.min(5, Math.max(0, avg * 5));
+  const latestTs = window.reduce((a, b) =>
+    new Date(a.ts_utc) > new Date(b.ts_utc) ? a : b).ts_utc;
+
   return {
-    id: e.id,
+    id: -1,
     patient_id: patientId,
     score,
-    risk_level,
-    reason: '실시간 행동 분석 기반 추정치',
+    risk_level: riskLevelFromScore5(score),
+    reason: `최근 ${scores.length}건 행동 분석 평균`,
     analyzed_from_utc: null,
     analyzed_to_utc: null,
-    created_at_utc: e.ts_utc,
+    created_at_utc: latestTs,
   };
 }
 
-function eventToAnalysis(e: EventItem): AnalysisItem {
+function eventToAnalysis(e: ActionEvent): AnalysisItem {
   const c = eventCategory(e.event_type, e.severity);
   const level: AlertLevel =
     c === 'danger' ? 'critical' :
@@ -411,7 +433,7 @@ export default function PatientDetail() {
           created_at_utc: listItem.latest_risk_score.created_at_utc,
         }
       : null)
-    ?? (latestEvent ? riskFromActionEvent(latestEvent, patientId) : null);
+    ?? riskFromRecentEvents(patientEvents ?? [], patientId);
 
   // 히어로 변수
   const riskLevel     = latestRisk?.risk_level;

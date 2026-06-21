@@ -56,7 +56,8 @@
       "PowerShell(git commit -m 'fix: �̺�Ʈ severity�� ����/����/���� 3�ܰ�� ���� ���� \\(����=����, �ڼ�/������=����\\)')",
       "PowerShell(git commit -m 'fix: �̺�Ʈ ���赵�� ���� �������� �з� \\(����=����, �������ڼ�=����\\)')",
       "PowerShell(git commit -m 'feat: ������ ��� ��Ȳ�� �˻� ��� �� ȯ�� ID �ĺ��� ǥ�� �߰�')",
-      "PowerShell(git commit -m 'fix: �������� �м� ������ ���� �� �ǽð� �׼� �̺�Ʈ�� ������ ���� ǥ��')"
+      "PowerShell(git commit -m 'fix: �������� �м� ������ ���� �� �ǽð� �׼� �̺�Ʈ�� ������ ���� ǥ��')",
+      "PowerShell(git commit -m 'fix: �������� ������ ���� �̺�Ʈ���� �ֱ� risk_score ������� ����')"
     ]
   }
 }
