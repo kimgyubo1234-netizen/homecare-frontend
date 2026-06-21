@@ -332,6 +332,7 @@ export default function PatientDetail() {
   const { patientId = '' } = useParams<{ patientId: string }>();
   const navigate = useNavigate();
   const [chartTab, setChartTab] = useState<'trend' | 'activity' | 'heatmap'>('trend');
+  const [showAllEvents, setShowAllEvents] = useState(false);
 
   useEffect(() => {
     document.title = `어르신 안전 돌봄 서비스 — ${patientId}`;
@@ -682,7 +683,17 @@ const { data: patients }       = usePatientList();
               <Card className="overflow-hidden">
                 <div className="h-0.5 w-full bg-slate-200" />
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-semibold">최근 이벤트</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold">최근 이벤트</CardTitle>
+                    {dashboard?.recent_events && dashboard.recent_events.length > 5 && (
+                      <button
+                        onClick={() => setShowAllEvents(v => !v)}
+                        className="text-xs text-blue-500 hover:text-blue-700 font-medium transition-colors"
+                      >
+                        {showAllEvents ? '접기' : `전체보기 (${dashboard.recent_events.length}건)`}
+                      </button>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent>
                   {isLoading ? (
@@ -691,7 +702,7 @@ const { data: patients }       = usePatientList();
                     </div>
                   ) : dashboard?.recent_events && dashboard.recent_events.length > 0 ? (
                     <ul className="space-y-1.5">
-                      {dashboard.recent_events.slice(0, 5).map((event, i) => {
+                      {(showAllEvents ? dashboard.recent_events : dashboard.recent_events.slice(0, 5)).map((event, i) => {
                         const EventIcon = getEventIcon(event.event_type);
                         const severityColor =
                           event.severity >= 3 ? 'bg-red-500' :
