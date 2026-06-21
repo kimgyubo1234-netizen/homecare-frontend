@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useDashboard } from '@/hooks/useDashboard';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useReadStore } from '@/lib/read-store';
+import { useAuthUser } from '@/lib/auth-store';
 import { usePatientList } from '@/hooks/usePatientList';
 import { ForbiddenError, NotFoundError } from '@/lib/api';
 import { formatKST, formatAge } from '@/lib/format';
@@ -331,6 +332,8 @@ function EmptyState({ message, sub }: { message: string; sub?: string }) {
 export default function PatientDetail() {
   const { patientId = '' } = useParams<{ patientId: string }>();
   const navigate = useNavigate();
+  const authUser = useAuthUser();
+  const isGuardian = authUser?.role === 'guardian';
   const [chartTab, setChartTab] = useState<'trend' | 'activity' | 'heatmap'>('trend');
   const [showAllEvents, setShowAllEvents] = useState(false);
 
@@ -457,7 +460,7 @@ const { data: patients }       = usePatientList();
                 <h1 className="text-2xl font-extrabold leading-tight">
                   {patientName} 어르신
                 </h1>
-                <p className="mt-1 text-sm text-white/55">{patientId}</p>
+                {!isGuardian && <p className="mt-1 text-sm text-white/55">{patientId}</p>}
               </div>
             )}
 
@@ -523,14 +526,16 @@ const { data: patients }       = usePatientList();
               </button>
 
               {/* 긴급 연락 버튼 */}
-              <button
-                type="button"
-                onClick={() => toast.success('보호자에게 긴급 연락 요청을 전송했습니다', { duration: 4000 })}
-                className="flex items-center gap-2 rounded-2xl border border-red-400/50 bg-red-500/20 backdrop-blur-sm px-5 py-3 text-sm font-medium text-red-200 hover:bg-red-500/35 transition-colors"
-              >
-                <Phone className="size-4" />
-                긴급 연락
-              </button>
+              {!isGuardian && (
+                <button
+                  type="button"
+                  onClick={() => toast.success('보호자에게 긴급 연락 요청을 전송했습니다', { duration: 4000 })}
+                  className="flex items-center gap-2 rounded-2xl border border-red-400/50 bg-red-500/20 backdrop-blur-sm px-5 py-3 text-sm font-medium text-red-200 hover:bg-red-500/35 transition-colors"
+                >
+                  <Phone className="size-4" />
+                  긴급 연락
+                </button>
+              )}
             </div>
           )}
         </div>
