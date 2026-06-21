@@ -4,7 +4,7 @@ import { X, Bell, ChevronRight } from 'lucide-react';
 import { useAllEvents } from '@/hooks/useAllEvents';
 import { usePatientList } from '@/hooks/usePatientList';
 import { formatKST } from '@/lib/format';
-import { translateEventType, eventSeverityDot, eventSeverityBadge, eventCategory } from '@/lib/event-labels';
+import { translateEventType, eventSeverityDot, eventSeverityBadge, eventScoreCategory } from '@/lib/event-labels';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -42,7 +42,7 @@ export default function AlertPanel({ open, onClose }: Props) {
     return [...allEvents]
       .filter(e => {
         if (filter === 'today')  return now - new Date(e.ts_utc).getTime() < 24 * 60 * 60 * 1000;
-        if (filter === 'danger') return eventCategory(e.event_type, e.severity) === 'danger';
+        if (filter === 'danger') return eventScoreCategory(e) === 'danger';
         return true;
       })
       .sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())
@@ -56,7 +56,7 @@ export default function AlertPanel({ open, onClose }: Props) {
   }, [allEvents]);
 
   const dangerCount = useMemo(() => {
-    return allEvents?.filter(e => eventCategory(e.event_type, e.severity) === 'danger').length ?? 0;
+    return allEvents?.filter(e => eventScoreCategory(e) === 'danger').length ?? 0;
   }, [allEvents]);
 
   useEffect(() => {
@@ -163,8 +163,8 @@ export default function AlertPanel({ open, onClose }: Props) {
             <ul className="divide-y divide-slate-50">
               {filtered.map(event => {
                 const name = patientMap[event.patient_id] ?? event.patient_id;
-                const dot = eventSeverityDot(event.severity, event.event_type);
-                const badge = eventSeverityBadge(event.severity, event.event_type);
+                const dot = eventSeverityDot(event);
+                const badge = eventSeverityBadge(event);
                 return (
                   <li key={event.id}>
                     <button

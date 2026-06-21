@@ -31,7 +31,7 @@ import {
 } from 'recharts';
 import type { RiskLevel, RiskScore, ActionEvent } from '@/types/api';
 import { usePatientEvents } from '@/hooks/usePatientEvents';
-import { eventCategory } from '@/lib/event-labels';
+import { eventScoreCategory } from '@/lib/event-labels';
 import type { SeverityCategory } from '@/lib/event-labels';
 import { avgRiskScore, riskLevelFromScore } from '@/lib/risk';
 
@@ -57,12 +57,8 @@ function riskFromRecentEvents(events: ActionEvent[], patientId: string): RiskSco
 }
 
 function eventToAnalysis(e: ActionEvent): AnalysisItem {
-  // 위험점수(risk_score×5) 기준 분류: 1~2 안전 / 3~4 주의 / 5 위험. 점수 없으면 유형 폴백.
-  const score5 = typeof e.risk_score === 'number' && !Number.isNaN(e.risk_score) ? e.risk_score * 5 : null;
-  const cat: SeverityCategory = score5 != null
-    ? (score5 >= 5 ? 'danger' : score5 >= 3 ? 'warning' : 'safe')
-    : eventCategory(e.event_type, e.severity);
-  return { ts_utc: e.ts_utc, type: e.event_type, cat };
+  // 위험점수(risk_score×5) 기준 분류: 1~2 안전 / 3~4 주의 / 5 위험
+  return { ts_utc: e.ts_utc, type: e.event_type, cat: eventScoreCategory(e) };
 }
 
 // ── constants ──────────────────────────────────────────────────────────────
@@ -104,10 +100,9 @@ function relativeTime(ts: string): string {
   return `${Math.floor(hours / 24)}일 전`;
 }
 
-function severityBorderClass(severity: number, eventType = ''): string {
-  const c = eventCategory(eventType, severity);
-  if (c === 'danger') return 'border-l-2 border-red-400 pl-2';
-  if (c === 'warning') return 'border-l-2 border-yellow-400 pl-2';
+function severityBorderClass(cat: SeverityCategory): string {
+  if (cat === 'danger') return 'border-l-2 border-red-400 pl-2';
+  if (cat === 'warning') return 'border-l-2 border-yellow-400 pl-2';
   return 'border-l-2 border-green-400 pl-2';
 }
 
@@ -378,6 +373,11 @@ export default function PatientDetail() {
   const analysisItems            = useMemo(() => (patientEvents ?? []).map(eventToAnalysis), [patientEvents]);
   const chartData                = useMemo(() => buildChartData(analysisItems), [analysisItems]);
   const heatmapData              = useMemo(() => buildHeatmapData(analysisItems), [analysisItems]);
+  // 최근 이벤트 목록 — 차트와 동일 데이터(위험점수 포함)로 최신순 정렬
+  const recentEventsSorted       = useMemo(
+    () => [...(patientEvents ?? [])].sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime()),
+    [patientEvents],
+  );
 
   // 이전 / 다음 어르신
   const currentIndex = patients?.findIndex(p => p.patient_id === patientId) ?? -1;
@@ -737,12 +737,12 @@ export default function PatientDetail() {
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-semibold">최근 이벤트</CardTitle>
-                    {dashboard?.recent_events && dashboard.recent_events.length > 5 && (
+                    {recentEventsSorted.length > 5 && (
                       <button
                         onClick={() => setShowAllEvents(v => !v)}
                         className="text-xs text-blue-500 hover:text-blue-700 font-medium transition-colors"
                       >
-                        {showAllEvents ? '접기' : `전체보기 (${dashboard.recent_events.length}건)`}
+                        {showAllEvents ? '접기' : `전체보기 (${recentEventsSorted.length}건)`}
                       </button>
                     )}
                   </div>
@@ -752,18 +752,18 @@ export default function PatientDetail() {
                     <div className="space-y-2">
                       {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-8" />)}
                     </div>
-                  ) : dashboard?.recent_events && dashboard.recent_events.length > 0 ? (
+                  ) : recentEventsSorted.length > 0 ? (
                     <ul className="space-y-1.5">
-                      {(showAllEvents ? dashboard.recent_events : dashboard.recent_events.slice(0, 5)).map((event, i) => {
+                      {(showAllEvents ? recentEventsSorted : recentEventsSorted.slice(0, 5)).map((event, i) => {
                         const EventIcon = getEventIcon(event.event_type);
-                        const sevCat = eventCategory(event.event_type, event.severity);
+                        const sevCat = eventScoreCategory(event);
                         const severityColor =
                           sevCat === 'danger' ? 'bg-red-500' :
                           sevCat === 'warning' ? 'bg-yellow-400' : 'bg-green-400';
                         return (
                           <li
                             key={event.id}
-                            className={`flex items-center gap-2.5 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 animate-in fade-in slide-in-from-right-2 duration-300 ${severityBorderClass(event.severity, event.event_type)}`}
+                            className={`flex items-center gap-2.5 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 animate-in fade-in slide-in-from-right-2 duration-300 ${severityBorderClass(sevCat)}`}
                             style={{ animationDelay: `${i * 80}ms` }}
                           >
                             <span className={`size-1.5 rounded-full shrink-0 ${severityColor}`} />

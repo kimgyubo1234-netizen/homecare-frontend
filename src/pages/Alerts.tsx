@@ -577,8 +577,8 @@ export default function Alerts() {
         ) : (
           <div className="space-y-1.5">
             {filteredEvents.map((event, i) => {
-              const dot = eventSeverityDot(event.severity, event.event_type);
-              const badge = eventSeverityBadge(event.severity, event.event_type);
+              const dot = eventSeverityDot(event);
+              const badge = eventSeverityBadge(event);
               const name = patientMap[event.patient_id] ?? event.patient_id;
               return (
                 <button

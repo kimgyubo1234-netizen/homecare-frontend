@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePatientList } from '@/hooks/usePatientList';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useAllEvents } from '@/hooks/useAllEvents';
-import { translateEventType, eventSeverityDot, eventSeverityBadge, eventCategory } from '@/lib/event-labels';
+import { translateEventType, eventSeverityDot, eventSeverityBadge, eventScoreCategory } from '@/lib/event-labels';
 import { avgRiskScore, riskLevelFromScore } from '@/lib/risk';
 import { formatKST } from '@/lib/format';
 import {
@@ -320,10 +320,10 @@ export default function Dashboard() {
 
   const totalPatients  = patients?.length ?? 0;
   const unreadAlerts   = allAlerts?.filter(a => !a.is_read && !readIds.includes(a.id)).length ?? 0;
-  // 위험 알림 = 최근 7일 위험(낙상 등) 감지 이벤트 수 — 최근 감지 목록과 일치
+  // 위험 알림 = 최근 7일 위험점수 기준 위험(5) 이벤트 수 — 알림 분석 차트의 위험과 일치
   const criticalAlerts = allEvents?.filter(e =>
     Date.now() - new Date(e.ts_utc).getTime() < 7 * 24 * 60 * 60 * 1000 &&
-    eventCategory(e.event_type, e.severity) === 'danger'
+    eventScoreCategory(e) === 'danger'
   ).length ?? 0;
   const isLoading      = isPatientsLoading || isAlertsLoading;
 
@@ -582,8 +582,8 @@ export default function Dashboard() {
 
                 <div className="space-y-4">
                   {recentEvents.map((event, i) => {
-                    const dot = eventSeverityDot(event.severity, event.event_type);
-                    const badge = eventSeverityBadge(event.severity, event.event_type);
+                    const dot = eventSeverityDot(event);
+                    const badge = eventSeverityBadge(event);
                     const name = patientMap[event.patient_id] ?? event.patient_id;
 
                     return (

@@ -47,15 +47,28 @@ export function eventCategory(eventType: string, severity = 0): SeverityCategory
   return severityCategory(severity);
 }
 
-export function eventSeverityDot(severity: number, eventType = ''): string {
-  const c = eventType ? eventCategory(eventType, severity) : severityCategory(severity);
+// 이벤트 위험도 = risk_score(×5) 기준. 1~2 안전 / 3~4 주의 / 5 위험.
+//   risk_score가 없으면 유형 기준으로 폴백.
+export interface EventLike { risk_score?: number | null; severity: number; event_type: string }
+
+export function eventScoreCategory(e: EventLike): SeverityCategory {
+  const rs = e.risk_score;
+  if (typeof rs === 'number' && !Number.isNaN(rs)) {
+    const s5 = rs * 5;
+    return s5 >= 5 ? 'danger' : s5 >= 3 ? 'warning' : 'safe';
+  }
+  return eventCategory(e.event_type, e.severity);
+}
+
+export function eventSeverityDot(e: EventLike): string {
+  const c = eventScoreCategory(e);
   if (c === 'danger') return 'bg-red-500 animate-pulse';
   if (c === 'warning') return 'bg-amber-400';
   return 'bg-emerald-400';
 }
 
-export function eventSeverityBadge(severity: number, eventType = ''): { color: string; label: string } {
-  const c = eventType ? eventCategory(eventType, severity) : severityCategory(severity);
+export function eventSeverityBadge(e: EventLike): { color: string; label: string } {
+  const c = eventScoreCategory(e);
   if (c === 'danger') return { color: 'bg-red-50 text-red-600 border-red-200', label: '위험' };
   if (c === 'warning') return { color: 'bg-amber-50 text-amber-600 border-amber-200', label: '주의' };
   return { color: 'bg-green-50 text-green-600 border-green-200', label: '안전' };
