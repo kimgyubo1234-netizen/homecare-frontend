@@ -142,11 +142,18 @@ export default function SseProvider() {
           playAlertSound(isCritical);
           showBrowserNotification(alert, patientName);
           queryClient.invalidateQueries({ queryKey: ['alerts'] });
+          // 알림은 이벤트에서 파생되므로 이벤트 피드·대시보드도 갱신
+          queryClient.invalidateQueries({ queryKey: ['events-feed'] });
+          queryClient.invalidateQueries({ queryKey: ['patient-events'] });
+          if (alert.patient_id) {
+            queryClient.invalidateQueries({ queryKey: ['dashboard', alert.patient_id] });
+          }
         } else if (type === 'RISK_SCORE') {
           const patientId = typeof data.patient_id === 'string' ? data.patient_id : null;
           if (patientId) {
             queryClient.invalidateQueries({ queryKey: ['dashboard', patientId] });
             queryClient.invalidateQueries({ queryKey: ['patient-list'] });
+            queryClient.invalidateQueries({ queryKey: ['patient-events', patientId] });
           }
         }
       } catch {

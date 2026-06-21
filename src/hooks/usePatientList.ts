@@ -7,6 +7,8 @@ export function usePatientList() {
     queryKey: ['patient-list'],
     queryFn: () => apiFetch<PatientListResponse>('/api/v1/patients'),
     select: (data): PatientListItem[] => data.patients,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 }

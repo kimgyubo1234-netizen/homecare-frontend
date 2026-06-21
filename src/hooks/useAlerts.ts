@@ -22,6 +22,8 @@ export function useAlerts({ patientId, source, levels, days = 90 }: AlertFilters
       if (!levels || levels.length === 0) return data.items;
       return data.items.filter((item) => levels.includes(item.level));
     },
-    staleTime: 30 * 1000,
+    staleTime: 10 * 1000,
+    refetchInterval: 20 * 1000,
+    refetchOnWindowFocus: true,
   });
 }

@@ -19,7 +19,7 @@ const FAILURE_LIMIT = 3;
 export function useActionPolling({
   patientId,
   intervalMs = 1500,
-  delayThresholdMs = 5000,
+  delayThresholdMs = 3000,
 }: UseActionPollingOptions): UseActionPollingResult {
   const [latestEvent, setLatestEvent] = useState<ActionEvent | null>(null);
   const [isConnected, setIsConnected] = useState(true);

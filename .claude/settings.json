@@ -13,7 +13,10 @@
       "PowerShell(python --version 2>&1)",
       "PowerShell(uvicorn --version 2>&1)",
       "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npx vite build)",
-      "Bash(echo \"Exit: $?\")"
+      "Bash(echo \"Exit: $?\")",
+      "PowerShell(gh --version 2>&1)",
+      "Skill(code-review)",
+      "Skill(code-review:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\Public\\Documents\\���� ������Ʈ\\����Ʈ���� ����\\src\\components",

@@ -10,6 +10,8 @@ export function useDashboard(patientId: string) {
         `/api/v1/dashboard?patient_id=${encodeURIComponent(patientId)}`
       ),
     enabled: !!patientId,
-    staleTime: 30 * 1000,
+    staleTime: 10 * 1000,
+    refetchInterval: 15 * 1000,
+    refetchOnWindowFocus: true,
   });
 }

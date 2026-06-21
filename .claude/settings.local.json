@@ -33,7 +33,18 @@
       "PowerShell($token = \\(Invoke-RestMethod -Uri \"http://localhost:8000/api/v1/auth/login\" -Method POST -ContentType \"application/json\" -Body '{\"email\":\"test@test.com\",\"password\":\"1234\"}'\\).access_token; Write-Output \"토큰: $token\"; $patients = \\(Invoke-RestMethod -Uri \"http://localhost:8000/api/v1/patients\" -Headers @{Authorization=\"Bearer $token\"}\\).patients; Write-Output \"환자 수: $\\($patients.Count\\)\"; $patients | ForEach-Object { Write-Output \"  - $\\($_.name\\) / 위험점수: $\\($_.latest_risk_score.score\\)\" })",
       "PowerShell($token = \\(Invoke-RestMethod -Uri \"http://localhost:8000/api/v1/auth/login\" -Method POST -ContentType \"application/json\" -Body '{\"email\":\"test@test.com\",\"password\":\"1234\"}'\\).access_token; $alerts = \\(Invoke-RestMethod -Uri \"http://localhost:8000/api/v1/alerts?days=7\" -Headers @{Authorization=\"Bearer $token\"}\\).items; Write-Output \"알림 수: $\\($alerts.Count\\)\"; $alerts | ForEach-Object { Write-Output \"  - [$\\($_.level\\)] $\\($_.alert_type\\) \\(읽음: $\\($_.is_read\\)\\)\" })",
       "Bash(Get-ChildItem \"c:\\\\Users\\\\Public\\\\Documents\\\\졸작 프로젝트\\\\프론트엔드 파일\" -File)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git -C \"c:\\\\Users\\\\Public\\\\Documents\\\\졸작 프로젝트\\\\프론트엔드 파일\" add src/pages/PatientDetail.tsx)",
+      "Bash(git -C 'c:\\\\Users\\\\Public\\\\Documents\\\\졸작 프로젝트\\\\프론트엔드 파일' commit -m ' *)",
+      "Bash(git -C \"c:\\\\Users\\\\Public\\\\Documents\\\\졸작 프로젝트\\\\프론트엔드 파일\" push)",
+      "Bash(git -C \"c:\\\\Users\\\\Public\\\\Documents\\\\졸작 프로젝트\\\\프론트엔드 파일\" status)",
+      "PowerShell(npx tsc --noEmit)",
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell(if \\(Test-Path dist\\) { Remove-Item dist -Recurse -Force }; npx vite build | Out-Null; \"EXIT=$LASTEXITCODE\"; if \\(Test-Path dist/index.html\\) { \"dist/index.html OK: \" + \\(Get-Item dist/index.html\\).LastWriteTime } else { \"NO dist/index.html\" })",
+      "PowerShell(git add -A)"
     ]
   }
 }

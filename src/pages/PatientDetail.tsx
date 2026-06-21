@@ -29,7 +29,19 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import type { RiskLevel, AlertLevel, AlertItem } from '@/types/api';
+import type { RiskLevel, AlertLevel, EventItem, RiskScore } from '@/types/api';
+import { usePatientEvents } from '@/hooks/usePatientEvents';
+
+// 알림 분석 차트용 정규화 타입 — 이벤트/알림 공통
+interface AnalysisItem { ts_utc: string; type: string; level: AlertLevel; }
+
+function eventToAnalysis(e: EventItem): AnalysisItem {
+  const level: AlertLevel =
+    e.severity >= 4 ? 'critical' :
+    e.severity === 3 ? 'high' :
+    e.severity === 2 ? 'medium' : 'low';
+  return { ts_utc: e.ts_utc, type: e.event_type, level };
+}
 
 // ── constants ──────────────────────────────────────────────────────────────
 
@@ -78,7 +90,7 @@ function severityBorderClass(severity: number): string {
 
 const HEATMAP_BLOCK_LABELS = ['00-03시', '04-07시', '08-11시', '12-15시', '16-19시', '20-23시'];
 
-function buildHeatmapData(alerts: AlertItem[]) {
+function buildHeatmapData(alerts: AnalysisItem[]) {
   const today = new Date();
   const dayKeys: string[] = [];
   const dayWeekLabels: string[] = [];
@@ -105,7 +117,7 @@ function buildHeatmapData(alerts: AlertItem[]) {
     const kstHour = new Date(new Date(alert.ts_utc).getTime() + 9 * 60 * 60 * 1000).getUTCHours();
     const cell = grid[Math.floor(kstHour / 4)][dayIdx];
     cell.count++;
-    const ko = translateEventType(alert.alert_type);
+    const ko = translateEventType(alert.type);
     cell.typeCounts[ko] = (cell.typeCounts[ko] ?? 0) + 1;
   }
 
@@ -120,7 +132,7 @@ function heatCellClass(count: number): string {
   return 'bg-red-500 text-white';
 }
 
-function buildHourlyData(alerts: AlertItem[]) {
+function buildHourlyData(alerts: AnalysisItem[]) {
   const slots: { hour: number; items: { type: string; level: AlertLevel }[] }[] =
     Array.from({ length: 24 }, (_, h) => ({ hour: h, items: [] }));
 
@@ -130,13 +142,13 @@ function buildHourlyData(alerts: AlertItem[]) {
   for (const a of alerts) {
     const kst = new Date(new Date(a.ts_utc).getTime() + 9 * 60 * 60 * 1000);
     if (kst.toISOString().slice(0, 10) !== todayStr) continue;
-    slots[kst.getUTCHours()].items.push({ type: a.alert_type, level: a.level });
+    slots[kst.getUTCHours()].items.push({ type: a.type, level: a.level });
   }
 
   return slots;
 }
 
-function buildChartData(alerts: AlertItem[]) {
+function buildChartData(alerts: AnalysisItem[]) {
   const entries: { date: string; low: number; medium: number; high: number; critical: number; typeCounts: Record<string, number> }[] = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
@@ -153,7 +165,7 @@ function buildChartData(alerts: AlertItem[]) {
     const entry = entries.find(e => e.date === key);
     if (entry) {
       entry[alert.level]++;
-      const ko = translateEventType(alert.alert_type);
+      const ko = translateEventType(alert.type);
       entry.typeCounts[ko] = (entry.typeCounts[ko] ?? 0) + 1;
     }
   }
@@ -287,14 +299,14 @@ function ChartTooltip({ active, payload, label }: {
 
 function RiskSegmentBar({ score }: { score: number }) {
   const pct = Math.min(Math.max((score / 5) * 100, 0), 100);
-  const markerColor = score <= 2 ? '#22c55e' : score <= 3 ? '#f97316' : '#ef4444';
+  const markerColor = score <= 2 ? '#22c55e' : score <= 4 ? '#f97316' : '#ef4444';
   return (
     <div className="mt-3 space-y-1.5">
       <div className="relative h-3">
         <div className="flex h-full rounded-full overflow-hidden">
           <div style={{ width: '40%' }} className="bg-green-400/70" />
-          <div style={{ width: '20%' }} className="bg-orange-400/70" />
-          <div style={{ width: '40%' }} className="bg-red-400/70" />
+          <div style={{ width: '40%' }} className="bg-orange-400/70" />
+          <div style={{ width: '20%' }} className="bg-red-400/70" />
         </div>
         <div
           className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 size-4 rounded-full ring-2 ring-white shadow-md transition-all duration-700"
@@ -302,9 +314,9 @@ function RiskSegmentBar({ score }: { score: number }) {
         />
       </div>
       <div className="flex text-[10px] font-medium">
-        <span style={{ width: '40%' }} className="text-center text-green-600">안전 (0~2)</span>
-        <span style={{ width: '20%' }} className="text-center text-orange-500">주의 (2~3)</span>
-        <span style={{ width: '40%' }} className="text-center text-red-500">위험 (3~5)</span>
+        <span style={{ width: '40%' }} className="text-center text-green-600">안전 (1~2)</span>
+        <span style={{ width: '40%' }} className="text-center text-orange-500">주의 (3~4)</span>
+        <span style={{ width: '20%' }} className="text-center text-red-500">위험 (5)</span>
       </div>
     </div>
   );
@@ -348,11 +360,13 @@ export default function PatientDetail() {
   const isAccessDenied = error instanceof ForbiddenError;
 
 
-  const { data: patientAlerts, isLoading: isAlertsLoading } = useAlerts({ patientId });
+  const { data: patientAlerts } = useAlerts({ patientId });
+  const { data: patientEvents, isLoading: isEventsLoading } = usePatientEvents(patientId);
   const readIds = useReadStore((s) => s.readIds);
-const { data: patients }       = usePatientList();
-  const chartData                = useMemo(() => buildChartData(patientAlerts ?? []), [patientAlerts]);
-  const heatmapData              = useMemo(() => buildHeatmapData(patientAlerts ?? []), [patientAlerts]);
+  const { data: patients }       = usePatientList();
+  const analysisItems            = useMemo(() => (patientEvents ?? []).map(eventToAnalysis), [patientEvents]);
+  const chartData                = useMemo(() => buildChartData(analysisItems), [analysisItems]);
+  const heatmapData              = useMemo(() => buildHeatmapData(analysisItems), [analysisItems]);
 
   // 이전 / 다음 어르신
   const currentIndex = patients?.findIndex(p => p.patient_id === patientId) ?? -1;
@@ -361,8 +375,23 @@ const { data: patients }       = usePatientList();
     ? patients![currentIndex + 1]
     : null;
 
+  // 최신 위험점수 — 대시보드 우선, 없으면 환자 목록의 최신 점수로 폴백
+  const listItem = patients?.find(p => p.patient_id === patientId);
+  const latestRisk: RiskScore | null = dashboard?.latest_risk ?? (listItem?.latest_risk_score
+    ? {
+        id: listItem.latest_risk_score.id,
+        patient_id: patientId,
+        score: listItem.latest_risk_score.score,
+        risk_level: listItem.latest_risk_score.risk_level,
+        reason: '',
+        analyzed_from_utc: null,
+        analyzed_to_utc: null,
+        created_at_utc: listItem.latest_risk_score.created_at_utc,
+      }
+    : null);
+
   // 히어로 변수
-  const riskLevel     = dashboard?.latest_risk?.risk_level;
+  const riskLevel     = latestRisk?.risk_level;
   const heroGradient  = riskLevel === 'high'
     ? 'from-red-900 via-red-800 to-rose-900'
     : riskLevel === 'medium'
@@ -370,7 +399,7 @@ const { data: patients }       = usePatientList();
     : 'from-blue-900 via-blue-800 to-indigo-900';
 
   // 카메라 상태 (위험점수 최신 업데이트 시각 기준)
-  const riskScoreTs   = dashboard?.latest_risk?.created_at_utc ?? null;
+  const riskScoreTs   = latestRisk?.created_at_utc ?? null;
   const riskAge       = riskScoreTs ? Date.now() - new Date(riskScoreTs).getTime() : null;
   const cameraOnline  = whepConnected || (riskAge !== null && riskAge < 60 * 60 * 1000);
   const cameraUnstable = !cameraOnline && riskAge !== null && riskAge < 6 * 60 * 60 * 1000;
@@ -378,18 +407,23 @@ const { data: patients }       = usePatientList();
   const cameraColor   = cameraOnline ? 'text-emerald-300' : cameraUnstable ? 'text-amber-300' : 'text-slate-400';
   const cameraDot     = cameraOnline ? 'bg-emerald-400 animate-pulse' : cameraUnstable ? 'bg-amber-400' : 'bg-slate-400';
 
-  // 마지막 감지 — 이벤트 우선, 없으면 알림 기준
-  const lastEventTs = dashboard?.recent_events && dashboard.recent_events.length > 0
-    ? [...dashboard.recent_events].sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())[0].ts_utc
-    : null;
+  // 마지막 감지 — 이벤트 우선, 없으면 대시보드 최근 이벤트/알림 기준
+  const lastEventTs = useMemo(() => {
+    const all = [
+      ...(patientEvents ?? []),
+      ...(dashboard?.recent_events ?? []),
+    ];
+    if (all.length === 0) return null;
+    return [...all].sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())[0].ts_utc;
+  }, [patientEvents, dashboard?.recent_events]);
   const lastAlertTs = patientAlerts && patientAlerts.length > 0
     ? [...patientAlerts].sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())[0].ts_utc
     : null;
   const lastActivityTs = lastEventTs ?? lastAlertTs;
 
   const hourlyData = useMemo(
-    () => buildHourlyData(patientAlerts ?? []),
-    [patientAlerts],
+    () => buildHourlyData(analysisItems),
+    [analysisItems],
   );
   const currentHour = new Date(Date.now() + 9 * 60 * 60 * 1000).getUTCHours();
   const patientName   = dashboard?.patient.name ?? patientId;
@@ -664,17 +698,19 @@ const { data: patients }       = usePatientList();
                       <Skeleton className="h-4 w-full" />
                       <Skeleton className="h-4 w-2/3" />
                     </div>
-                  ) : dashboard?.latest_risk ? (
+                  ) : latestRisk ? (
                     <div className="space-y-3">
-                      <RiskGauge score={dashboard.latest_risk.score} level={dashboard.latest_risk.risk_level} />
-                      <RiskSegmentBar score={dashboard.latest_risk.score} />
+                      <RiskGauge score={latestRisk.score} level={latestRisk.risk_level} />
+                      <RiskSegmentBar score={latestRisk.score} />
                       <div className="flex justify-center">
-                        <Badge variant="outline" className={riskBadgeClass[dashboard.latest_risk.risk_level]}>
-                          {riskLevelLabel[dashboard.latest_risk.risk_level]}
+                        <Badge variant="outline" className={riskBadgeClass[latestRisk.risk_level]}>
+                          {riskLevelLabel[latestRisk.risk_level]}
                         </Badge>
                       </div>
-                      <p className="text-sm text-slate-600 text-center">{dashboard.latest_risk.reason}</p>
-                      <p className="text-xs text-slate-400 text-center">{formatKST(dashboard.latest_risk.created_at_utc)}</p>
+                      {latestRisk.reason && (
+                        <p className="text-sm text-slate-600 text-center">{latestRisk.reason}</p>
+                      )}
+                      <p className="text-xs text-slate-400 text-center">{formatKST(latestRisk.created_at_utc)}</p>
                     </div>
                   ) : (
                     <EmptyState message="위험점수 없음" sub="분석 데이터를 기다리는 중입니다" />
@@ -737,8 +773,8 @@ const { data: patients }       = usePatientList();
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <CardTitle>알림 분석</CardTitle>
-                    {patientAlerts && patientAlerts.length > 0 && (
-                      <span className="text-xs text-slate-400">{patientAlerts.length}건</span>
+                    {analysisItems.length > 0 && (
+                      <span className="text-xs text-slate-400">{analysisItems.length}건</span>
                     )}
                   </div>
                   <div className="flex rounded-lg bg-slate-100 p-1 gap-0.5">
@@ -763,7 +799,7 @@ const { data: patients }       = usePatientList();
                 </div>
               </CardHeader>
               <CardContent>
-                {isAlertsLoading ? (
+                {isEventsLoading ? (
                   <div className="space-y-3 py-1">
                     <div className="flex justify-end gap-1">
                       <Skeleton className="h-7 w-20 rounded-md" />
@@ -948,24 +984,24 @@ const { data: patients }       = usePatientList();
         )}
 
         {/* 위험점수 */}
-        {dashboard?.latest_risk && (
+        {latestRisk && (
           <section className="mb-6">
             <h2 className="text-base font-bold border-b border-slate-200 pb-1 mb-3">최신 위험점수</h2>
             <div className="flex items-center gap-6">
               <div className="text-4xl font-extrabold tabular-nums">
-                {dashboard.latest_risk.score.toFixed(1)}
+                {latestRisk.score.toFixed(1)}
                 <span className="text-lg font-normal text-slate-400 ml-1">/ 5</span>
               </div>
               <div>
                 <p className="text-sm font-semibold">
-                  {dashboard.latest_risk.risk_level === 'high' ? '위험 수준'
-                    : dashboard.latest_risk.risk_level === 'medium' ? '주의 수준'
+                  {latestRisk.risk_level === 'high' ? '위험 수준'
+                    : latestRisk.risk_level === 'medium' ? '주의 수준'
                     : '안전 수준'}
                 </p>
-                {dashboard.latest_risk.reason && (
-                  <p className="text-sm text-slate-600 mt-0.5">{dashboard.latest_risk.reason}</p>
+                {latestRisk.reason && (
+                  <p className="text-sm text-slate-600 mt-0.5">{latestRisk.reason}</p>
                 )}
-                <p className="text-xs text-slate-400 mt-0.5">{formatKST(dashboard.latest_risk.created_at_utc)}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{formatKST(latestRisk.created_at_utc)}</p>
               </div>
             </div>
           </section>

@@ -19,13 +19,6 @@ import { useWhepStatus } from '@/hooks/useWhepStatus';
 // ── constants ──────────────────────────────────────────────────────────────
 
 
-const levelDotClass: Record<AlertLevel, string> = {
-  critical: 'bg-red-500 animate-pulse',
-  high:     'bg-red-400',
-  medium:   'bg-amber-400',
-  low:      'bg-emerald-400',
-};
-
 // ── helpers ────────────────────────────────────────────────────────────────
 
 function relativeTime(ts: string, now: number = Date.now()): string {
@@ -112,8 +105,8 @@ function RiskGaugeBar({ score }: { score: number }) {
     return () => clearTimeout(id);
   }, []);
 
-  const barColor   = score <= 2 ? 'bg-emerald-400' : score <= 3 ? 'bg-amber-400' : 'bg-red-500';
-  const scoreColor = score <= 2 ? 'text-emerald-600' : score <= 3 ? 'text-amber-600' : 'text-red-600';
+  const barColor   = score <= 2 ? 'bg-emerald-400' : score <= 4 ? 'bg-amber-400' : 'bg-red-500';
+  const scoreColor = score <= 2 ? 'text-emerald-600' : score <= 4 ? 'text-amber-600' : 'text-red-600';
 
   return (
     <div className="mt-3">
@@ -142,9 +135,17 @@ interface PatientStat {
   highestLevel: AlertLevel | null;
   lastAlertTs: string | null;
   lastAnyAlertTs: string | null;
+  lastEventTs: string | null;
   riskScore: number | null;
   riskScoreTs: string | null;
   status: string;
+}
+
+// 여러 시각 중 가장 최근(ISO 문자열) 반환
+function latestTs(...values: (string | null)[]): string | null {
+  const valid = values.filter((v): v is string => !!v);
+  if (valid.length === 0) return null;
+  return valid.reduce((a, b) => (new Date(a) > new Date(b) ? a : b));
 }
 
 function PatientCard({ p, tick, index }: { p: PatientStat; tick: number; index: number }) {
@@ -152,15 +153,18 @@ function PatientCard({ p, tick, index }: { p: PatientStat; tick: number; index: 
   const whepConnected = useWhepStatus(p.id);
   const st = elderStatus(p.highestLevel);
 
-  const riskAge = p.riskScoreTs ? tick - new Date(p.riskScoreTs).getTime() : null;
+  // 활동 감지 시각 — 위험점수·이벤트·알림 중 가장 최근값 기준
+  const activityTs = latestTs(p.riskScoreTs, p.lastEventTs, p.lastAnyAlertTs);
+  const riskAge = activityTs ? tick - new Date(activityTs).getTime() : null;
   const cameraOnline   = whepConnected || (riskAge !== null && riskAge < 60 * 60 * 1000);
   const cameraUnstable = !cameraOnline && riskAge !== null && riskAge < 6 * 60 * 60 * 1000;
   const activityRecent = riskAge !== null && riskAge < 6 * 60 * 60 * 1000;
 
-  const lastAnyAlertAge = p.lastAnyAlertTs ? tick - new Date(p.lastAnyAlertTs).getTime() : null;
-  const lastActivityAge = riskAge ?? lastAnyAlertAge;
-  const hasAnyHistory = p.riskScoreTs !== null || p.lastAnyAlertTs !== null;
+  const lastActivityAge = riskAge;
+  const hasAnyHistory = activityTs !== null;
   const noActivity = hasAnyHistory && lastActivityAge !== null && lastActivityAge > 12 * 60 * 60 * 1000;
+  // 하단 표시용 마지막 활동 시각 (이벤트/알림 우선)
+  const lastSeenTs = latestTs(p.lastEventTs, p.lastAnyAlertTs, p.riskScoreTs);
 
   return (
     <button
@@ -203,10 +207,10 @@ function PatientCard({ p, tick, index }: { p: PatientStat; tick: number; index: 
           {p.name}
         </p>
         <p className="text-xs text-slate-400 mt-0.5">{p.id}</p>
-        {p.riskScoreTs && (
+        {activityTs && (
           <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${activityRecent ? 'text-emerald-600' : 'text-slate-400'}`}>
             <span className={`size-1.5 rounded-full shrink-0 ${activityRecent ? 'bg-emerald-400 animate-pulse' : 'bg-slate-300'}`} />
-            {relativeTime(p.riskScoreTs, tick)} 활동 감지됨
+            {relativeTime(activityTs, tick)} 활동 감지됨
           </p>
         )}
 
@@ -220,10 +224,10 @@ function PatientCard({ p, tick, index }: { p: PatientStat; tick: number; index: 
         {p.riskScore !== null && <RiskGaugeBar score={p.riskScore} />}
 
         <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 text-xs text-slate-400">
-          {p.lastAnyAlertTs ? (
+          {lastSeenTs ? (
             <>
               <Clock className="size-3" />
-              <span>{relativeTime(p.lastAnyAlertTs, tick)}</span>
+              <span>{relativeTime(lastSeenTs, tick)}</span>
             </>
           ) : cameraOnline ? (
             <span className="text-emerald-500 font-medium">이상 없음</span>
@@ -255,7 +259,6 @@ export default function Dashboard() {
   const { data: patients, isLoading: isPatientsLoading } = usePatientList();
   const { data: allAlerts, isLoading: isAlertsLoading } = useAlerts();
   const { data: allEvents, isLoading: isEventsLoading } = useAllEvents(50);
-  const markRead = useReadStore((s) => s.markRead);
   const readIds = useReadStore((s) => s.readIds);
 
   const patientMap = useMemo(() => {
@@ -269,6 +272,7 @@ export default function Dashboard() {
     return patients.map(p => {
       const pa = allAlerts?.filter(a => a.patient_id === p.patient_id && !a.is_read && !readIds.includes(a.id)) ?? [];
       const allPa = allAlerts?.filter(a => a.patient_id === p.patient_id) ?? [];
+      const pe = allEvents?.filter(e => e.patient_id === p.patient_id) ?? [];
       const alertHighestLevel = levels.find(l => pa.some(a => a.level === l)) ?? null;
       const highestLevel = alertHighestLevel;
       const lastAlertTs = pa.length > 0
@@ -277,6 +281,9 @@ export default function Dashboard() {
       const lastAnyAlertTs = allPa.length > 0
         ? allPa.reduce((a, b) => new Date(a.ts_utc) > new Date(b.ts_utc) ? a : b).ts_utc
         : null;
+      const lastEventTs = pe.length > 0
+        ? pe.reduce((a, b) => new Date(a.ts_utc) > new Date(b.ts_utc) ? a : b).ts_utc
+        : null;
       return {
         id: p.patient_id,
         name: p.name,
@@ -284,12 +291,13 @@ export default function Dashboard() {
         highestLevel,
         lastAlertTs,
         lastAnyAlertTs,
+        lastEventTs,
         riskScore: p.latest_risk_score?.score ?? null,
         riskScoreTs: p.latest_risk_score?.created_at_utc ?? null,
         status: p.status,
       };
     });
-  }, [patients, allAlerts]);
+  }, [patients, allAlerts, allEvents, readIds]);
 
   const recentEvents = useMemo(() => {
     if (!allEvents) return [];
@@ -496,8 +504,8 @@ export default function Dashboard() {
           <div className="grid grid-cols-3 gap-5">
             {(patientStats ?? patients.map(p => ({
               id: p.patient_id, name: p.name, count: 0,
-              highestLevel: null, lastAlertTs: null, lastAnyAlertTs: null, riskScore: null,
-              riskScoreTs: null, status: p.status,
+              highestLevel: null, lastAlertTs: null, lastAnyAlertTs: null, lastEventTs: null,
+              riskScore: null, riskScoreTs: null, status: p.status,
             }))).map((p, i) => (
               <PatientCard key={p.id} p={p} tick={tick} index={i} />
             ))}

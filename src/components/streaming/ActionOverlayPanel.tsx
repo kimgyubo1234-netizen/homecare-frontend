@@ -62,11 +62,27 @@ export default function ActionOverlayPanel({ event, isConnected, isDelayed }: Pr
     );
   }
 
-  // 추론 대기 (연결됐지만 데이터 없음)
-  if (!event) {
+  // 3초 이상 갱신된 값이 없거나 데이터가 없으면 기본값은 "안전"
+  if (!event || isDelayed) {
+    const safe = RISK_COLOR.NORMAL;
     return (
-      <div style={panelStyle}>
-        <p className="text-xs text-slate-400 text-center">추론 대기 중...</p>
+      <div style={{ ...panelStyle, border: '1px solid #e2e8f0' }}>
+        <div className="text-[11px] font-bold text-slate-700 truncate">
+          현재 상태: 안전
+        </div>
+        <div className="flex items-center gap-2 mt-1">
+          <span
+            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
+            style={{
+              backgroundColor: safe.bg,
+              border: `1px solid ${safe.border}`,
+              color: safe.text,
+            }}
+          >
+            안전
+          </span>
+          <span className="text-[10px] text-slate-400 shrink-0">위험도 1</span>
+        </div>
       </div>
     );
   }
