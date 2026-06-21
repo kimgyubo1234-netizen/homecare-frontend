@@ -4,6 +4,7 @@ import { usePatientList } from '@/hooks/usePatientList';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useAllEvents } from '@/hooks/useAllEvents';
 import { translateEventType, eventSeverityDot, eventSeverityBadge, eventCategory } from '@/lib/event-labels';
+import { avgRiskScore, riskLevelFromScore } from '@/lib/risk';
 import { formatKST } from '@/lib/format';
 import {
   Users, ChevronRight, Clock,
@@ -258,7 +259,7 @@ export default function Dashboard() {
 
   const { data: patients, isLoading: isPatientsLoading } = usePatientList();
   const { data: allAlerts, isLoading: isAlertsLoading } = useAlerts();
-  const { data: allEvents, isLoading: isEventsLoading } = useAllEvents(50);
+  const { data: allEvents, isLoading: isEventsLoading } = useAllEvents(200);
   const readIds = useReadStore((s) => s.readIds);
 
   const patientMap = useMemo(() => {
@@ -275,20 +276,11 @@ export default function Dashboard() {
       const pe = allEvents?.filter(e => e.patient_id === p.patient_id) ?? [];
       const alertHighestLevel = levels.find(l => pa.some(a => a.level === l)) ?? null;
 
-      // 카드 등급 = 미읽음 알림 · 위험점수 · 최근 24시간 감지 이벤트 중 최고 등급
-      const now = Date.now();
-      const recentCats = pe
-        .filter(e => now - new Date(e.ts_utc).getTime() < 24 * 60 * 60 * 1000)
-        .map(e => eventCategory(e.event_type, e.severity));
-      const eventLevel: AlertLevel | null =
-        recentCats.includes('danger') ? 'high' : recentCats.includes('warning') ? 'medium' : null;
-      const riskLvl = p.latest_risk_score?.risk_level ?? null;
-      const riskAsAlert: AlertLevel | null =
-        riskLvl === 'high' ? 'high' : riskLvl === 'medium' ? 'medium' : null;
-      const rank: Record<AlertLevel, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-      const highestLevel = [alertHighestLevel, eventLevel, riskAsAlert]
-        .filter((l): l is AlertLevel => l !== null)
-        .sort((a, b) => rank[a] - rank[b])[0] ?? null;
+      // 카드 등급/점수 = 통일 기준(위험점수). 백엔드 분석값 우선, 없으면 최근 이벤트 평균.
+      const unifiedScore = p.latest_risk_score?.score ?? avgRiskScore(pe);
+      const scoreLevel: AlertLevel | null = unifiedScore != null ? riskLevelFromScore(unifiedScore) : null;
+      // 점수가 전혀 없을 때만 미읽음 알림 등급으로 폴백
+      const highestLevel: AlertLevel | null = scoreLevel ?? alertHighestLevel;
       const lastAlertTs = pa.length > 0
         ? pa.reduce((a, b) => new Date(a.ts_utc) > new Date(b.ts_utc) ? a : b).ts_utc
         : null;
@@ -306,8 +298,8 @@ export default function Dashboard() {
         lastAlertTs,
         lastAnyAlertTs,
         lastEventTs,
-        riskScore: p.latest_risk_score?.score ?? null,
-        riskScoreTs: p.latest_risk_score?.created_at_utc ?? null,
+        riskScore: unifiedScore,
+        riskScoreTs: p.latest_risk_score?.created_at_utc ?? lastEventTs,
         status: p.status,
       };
     });
@@ -328,7 +320,11 @@ export default function Dashboard() {
 
   const totalPatients  = patients?.length ?? 0;
   const unreadAlerts   = allAlerts?.filter(a => !a.is_read && !readIds.includes(a.id)).length ?? 0;
-  const criticalAlerts = allAlerts?.filter(a => a.level === 'critical' || a.level === 'high').length ?? 0;
+  // 위험 알림 = 최근 7일 위험(낙상 등) 감지 이벤트 수 — 최근 감지 목록과 일치
+  const criticalAlerts = allEvents?.filter(e =>
+    Date.now() - new Date(e.ts_utc).getTime() < 7 * 24 * 60 * 60 * 1000 &&
+    eventCategory(e.event_type, e.severity) === 'danger'
+  ).length ?? 0;
   const isLoading      = isPatientsLoading || isAlertsLoading;
 
   const tick           = useNow();

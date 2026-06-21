@@ -7,14 +7,13 @@ import { usePatientList } from '@/hooks/usePatientList';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useAllEvents } from '@/hooks/useAllEvents';
 import { eventCategory } from '@/lib/event-labels';
+import { avgRiskScore, riskLevelFromScore } from '@/lib/risk';
 import { formatKST } from '@/lib/format';
 import { useMutation } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
-import type { GuardianListResponse, GuardianListItem, AdminRegisterGuardianRequest } from '@/types/api';
+import type { GuardianListResponse, GuardianListItem, AdminRegisterGuardianRequest, RiskLevel } from '@/types/api';
 import SseProvider from '@/components/SseProvider';
-
-const RISK_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 const ALERT_TYPE_KO: Record<string, string> = {
   fall: '낙상',
@@ -168,20 +167,33 @@ export default function AdminDashboard() {
     document.title = '관리자 대시보드 — 어르신 안전 돌봄 서비스';
   }, []);
 
-  // 위험도 높은 순 정렬
+  // 통일 위험점수 — 백엔드 분석값 우선, 없으면 최근 이벤트 risk_score 평균
+  const patientRisk = useMemo(() => {
+    const map: Record<string, { score: number | null; level: RiskLevel | null; ts: string | null }> = {};
+    for (const p of (patientData ?? [])) {
+      const pe = (allEvents ?? []).filter(e => e.patient_id === p.patient_id);
+      const score = p.latest_risk_score?.score ?? avgRiskScore(pe);
+      const ts = p.latest_risk_score?.created_at_utc
+        ?? (pe.length ? [...pe].sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())[0].ts_utc : null);
+      map[p.patient_id] = { score, level: score != null ? riskLevelFromScore(score) : null, ts };
+    }
+    return map;
+  }, [patientData, allEvents]);
+
+  // 위험도 높은 순 정렬 (통일 점수 기준)
   const patients = useMemo(() => {
     const list = patientData ?? [];
     return [...list].sort((a, b) => {
-      const ra = a.latest_risk_score;
-      const rb = b.latest_risk_score;
-      if (!ra && !rb) return 0;
-      if (!ra) return 1;
-      if (!rb) return -1;
-      const levelDiff = (RISK_ORDER[ra.risk_level] ?? 9) - (RISK_ORDER[rb.risk_level] ?? 9);
-      if (levelDiff !== 0) return levelDiff;
-      return rb.score - ra.score;
+      const ra = patientRisk[a.patient_id];
+      const rb = patientRisk[b.patient_id];
+      const sa = ra?.score ?? null;
+      const sb = rb?.score ?? null;
+      if (sa == null && sb == null) return 0;
+      if (sa == null) return 1;
+      if (sb == null) return -1;
+      return sb - sa;
     });
-  }, [patientData]);
+  }, [patientData, patientRisk]);
 
   // 검색어로 어르신 필터 (이름 또는 환자 ID)
   const filteredPatients = useMemo(() => {
@@ -198,11 +210,13 @@ export default function AdminDashboard() {
   }, [patientData]);
 
   const totalPatients  = patients.length;
-  const dangerPatients = patients.filter(
-    p => p.latest_risk_score && p.latest_risk_score.risk_level === 'high'
-  ).length;
+  const dangerPatients = patients.filter(p => patientRisk[p.patient_id]?.level === 'high').length;
   const unreadAlerts   = alerts?.filter(a => !a.is_read && !readIds.includes(a.id)).length ?? 0;
-  const criticalAlerts = alerts?.filter(a => a.level === 'critical' || a.level === 'high').length ?? 0;
+  // 위험 알림 = 최근 7일 위험(낙상 등) 감지 이벤트 수 — 최근 감지 목록과 일치
+  const criticalAlerts = allEvents?.filter(e =>
+    Date.now() - new Date(e.ts_utc).getTime() < 7 * 24 * 60 * 60 * 1000 &&
+    eventCategory(e.event_type, e.severity) === 'danger'
+  ).length ?? 0;
 
   function handleLogout() {
     clearAuth();
@@ -340,8 +354,8 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {filteredPatients.map((p, idx) => {
-                    const rs = p.latest_risk_score;
-                    const isDanger = rs && rs.risk_level === 'high';
+                    const risk = patientRisk[p.patient_id];
+                    const isDanger = risk?.level === 'high';
                     return (
                       <tr
                         key={p.patient_id}
@@ -363,22 +377,22 @@ export default function AdminDashboard() {
                         </td>
                         <td className="px-5 py-3.5 text-slate-400">{p.gender ?? '-'}</td>
                         <td className="px-5 py-3.5">
-                          {rs ? (
-                            <span className={`text-base font-bold ${levelColor[rs.risk_level]}`}>
-                              {rs.score.toFixed(1)}
+                          {risk?.score != null && risk.level ? (
+                            <span className={`text-base font-bold ${levelColor[risk.level]}`}>
+                              {risk.score.toFixed(1)}
                               <span className="ml-0.5 text-xs font-normal text-slate-600">/ 5</span>
                             </span>
                           ) : <span className="text-slate-600">-</span>}
                         </td>
                         <td className="px-5 py-3.5">
-                          {rs ? (
-                            <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${levelBg[rs.risk_level]}`}>
-                              {levelLabel[rs.risk_level]}
+                          {risk?.level ? (
+                            <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${levelBg[risk.level]}`}>
+                              {levelLabel[risk.level]}
                             </span>
                           ) : <span className="text-xs text-slate-600">-</span>}
                         </td>
                         <td className="px-5 py-3.5 text-xs text-slate-500">
-                          {rs ? formatKST(rs.created_at_utc) : '-'}
+                          {risk?.ts ? formatKST(risk.ts) : '-'}
                         </td>
                         <td className="px-5 py-3.5 text-slate-600">
                           <ChevronRight className="size-4" />

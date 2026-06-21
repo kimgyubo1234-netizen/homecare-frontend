@@ -32,44 +32,23 @@ import {
 import type { RiskLevel, AlertLevel, RiskScore, ActionEvent } from '@/types/api';
 import { usePatientEvents } from '@/hooks/usePatientEvents';
 import { eventCategory } from '@/lib/event-labels';
+import { avgRiskScore, riskLevelFromScore } from '@/lib/risk';
 
 // 알림 분석 차트용 정규화 타입 — 이벤트/알림 공통
 interface AnalysisItem { ts_utc: string; type: string; level: AlertLevel; }
 
-function riskLevelFromScore5(score: number): RiskLevel {
-  if (score >= 5) return 'high';     // 위험
-  if (score >= 3) return 'medium';   // 주의
-  return 'low';                       // 안전 (1~2)
-}
-
-// 위험점수 분석 데이터가 없을 때, 최근 액션 이벤트들의 risk_score 평균으로 추정.
-//   1순위: 최근 5분 이내 이벤트 / 없으면 최근 10건
+// 위험점수 분석 데이터가 없을 때, 최근 액션 이벤트 risk_score 평균으로 추정 (공통 기준 사용)
 function riskFromRecentEvents(events: ActionEvent[], patientId: string): RiskScore | null {
-  if (!events || events.length === 0) return null;
-  const now = Date.now();
-  const windowMs = 5 * 60 * 1000;
-  let window = events.filter(e => now - new Date(e.ts_utc).getTime() <= windowMs);
-  if (window.length === 0) {
-    window = [...events]
-      .sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())
-      .slice(0, 10);
-  }
-  const scores = window
-    .map(e => e.risk_score)
-    .filter((s): s is number => typeof s === 'number' && !Number.isNaN(s));
-  if (scores.length === 0) return null;
-
-  const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-  const score = Math.min(5, Math.max(0, avg * 5));
-  const latestTs = window.reduce((a, b) =>
-    new Date(a.ts_utc) > new Date(b.ts_utc) ? a : b).ts_utc;
-
+  const score = avgRiskScore(events);
+  if (score === null || events.length === 0) return null;
+  const latestTs = [...events]
+    .sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())[0].ts_utc;
   return {
     id: -1,
     patient_id: patientId,
     score,
-    risk_level: riskLevelFromScore5(score),
-    reason: `최근 ${scores.length}건 행동 분석 평균`,
+    risk_level: riskLevelFromScore(score),
+    reason: '최근 행동 분석 평균',
     analyzed_from_utc: null,
     analyzed_to_utc: null,
     created_at_utc: latestTs,
