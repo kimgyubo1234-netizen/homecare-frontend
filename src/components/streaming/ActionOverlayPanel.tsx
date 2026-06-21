@@ -9,15 +9,6 @@ interface Props {
   isDelayed: boolean;
 }
 
-function formatTimeKST(isoStr: string): string {
-  return new Date(isoStr).toLocaleTimeString('ko-KR', {
-    timeZone: 'Asia/Seoul',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-}
 
 function toRiskKey(label: string | undefined): RiskLabelKey {
   if (!label) return 'NORMAL';
@@ -106,9 +97,7 @@ export default function ActionOverlayPanel({ event, isConnected, isDelayed }: Pr
         <span className="text-[11px] text-slate-400 shrink-0">
           위험도 {Math.max(1, Math.min(5, Math.round(event.risk_score * 5)))}
         </span>
-        <span className="text-[10px] text-slate-400 shrink-0">
-          {formatTimeKST(event.ts_utc)}
-        </span>
+
         {isDelayed && (
           <span className="text-[10px] text-yellow-500 shrink-0" title="데이터 수신 지연">
             ⚠ 지연
