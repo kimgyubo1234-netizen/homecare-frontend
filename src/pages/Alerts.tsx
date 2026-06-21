@@ -2,10 +2,12 @@ import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Bell, CheckCircle2, Circle, CheckCheck, ChevronLeft } from 'lucide-react';
 import { useAlerts } from '@/hooks/useAlerts';
+import { useAllEvents } from '@/hooks/useAllEvents';
 import { usePatientList } from '@/hooks/usePatientList';
 import { ForbiddenError } from '@/lib/api';
 import { useReadStore } from '@/lib/read-store';
 import { formatKST } from '@/lib/format';
+import { translateEventType, eventSeverityDot, eventSeverityBadge } from '@/lib/event-labels';
 import {
   Card,
   CardContent,
@@ -110,6 +112,14 @@ export default function Alerts() {
     source: source || undefined,
     levels: selectedLevels.length > 0 ? selectedLevels : undefined,
   });
+
+  const { data: allEvents, isLoading: isEventsLoading } = useAllEvents(200);
+  const filteredEvents = useMemo(() => {
+    if (!allEvents) return [];
+    return allEvents
+      .filter(e => !patientId || e.patient_id === patientId)
+      .sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime());
+  }, [allEvents, patientId]);
 
   const [viewMode, setViewMode] = useState<'table' | 'history'>('history');
   const [toggled, setToggled] = useState<Set<number>>(new Set());
@@ -545,6 +555,58 @@ export default function Alerts() {
           </CardContent>
         </Card>
       )}
+      {/* 이벤트 이력 */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-700">이벤트 이력</h2>
+          {!isEventsLoading && (
+            <span className="text-xs text-slate-400">{filteredEvents.length}건</span>
+          )}
+        </div>
+
+        {isEventsLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-12 rounded-xl bg-slate-100 animate-pulse" />
+            ))}
+          </div>
+        ) : filteredEvents.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-white py-10 text-center">
+            <p className="text-sm text-slate-400">이벤트 이력이 없습니다</p>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {filteredEvents.map((event, i) => {
+              const dot = eventSeverityDot(event.severity);
+              const badge = eventSeverityBadge(event.severity);
+              const name = patientMap[event.patient_id] ?? event.patient_id;
+              return (
+                <button
+                  key={event.id}
+                  onClick={() => navigate(`/dashboard/${event.patient_id}`)}
+                  className="flex w-full items-center gap-4 rounded-xl border border-slate-100 bg-white px-5 py-3 text-left transition-all hover:shadow-sm hover:border-blue-200 animate-in fade-in"
+                  style={{ animationDelay: `${i * 15}ms` }}
+                >
+                  <span className={`size-2 rounded-full shrink-0 ${dot}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm font-semibold text-slate-800">{name} 어르신</span>
+                      <span className="text-slate-300">·</span>
+                      <span className="text-sm text-slate-500">{translateEventType(event.event_type)}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${badge.color}`}>
+                      {badge.label}
+                    </span>
+                    <span className="text-xs text-slate-400 whitespace-nowrap">{formatKST(event.ts_utc)}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

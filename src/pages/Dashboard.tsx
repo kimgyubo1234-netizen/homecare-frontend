@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePatientList } from '@/hooks/usePatientList';
 import { useAlerts } from '@/hooks/useAlerts';
+import { useAllEvents } from '@/hooks/useAllEvents';
+import { translateEventType, eventSeverityDot, eventSeverityBadge } from '@/lib/event-labels';
 import { formatKST } from '@/lib/format';
 import {
   Users, ChevronRight, Clock,
@@ -252,6 +254,7 @@ export default function Dashboard() {
 
   const { data: patients, isLoading: isPatientsLoading } = usePatientList();
   const { data: allAlerts, isLoading: isAlertsLoading } = useAlerts();
+  const { data: allEvents, isLoading: isEventsLoading } = useAllEvents(50);
   const markRead = useReadStore((s) => s.markRead);
   const readIds = useReadStore((s) => s.readIds);
 
@@ -288,18 +291,18 @@ export default function Dashboard() {
     });
   }, [patients, allAlerts]);
 
-  const recentAlerts = useMemo(() => {
-    if (!allAlerts) return [];
+  const recentEvents = useMemo(() => {
+    if (!allEvents) return [];
     const now = Date.now();
-    return [...allAlerts]
-      .filter(a => {
-        if (activityFilter === 'today') return now - new Date(a.ts_utc).getTime() < 24 * 60 * 60 * 1000;
-        if (activityFilter === 'week')  return now - new Date(a.ts_utc).getTime() < 7 * 24 * 60 * 60 * 1000;
+    return [...allEvents]
+      .filter(e => {
+        if (activityFilter === 'today') return now - new Date(e.ts_utc).getTime() < 24 * 60 * 60 * 1000;
+        if (activityFilter === 'week')  return now - new Date(e.ts_utc).getTime() < 7 * 24 * 60 * 60 * 1000;
         return true;
       })
       .sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())
       .slice(0, 20);
-  }, [allAlerts, activityFilter]);
+  }, [allEvents, activityFilter]);
 
   const totalPatients  = patients?.length ?? 0;
   const unreadAlerts   = allAlerts?.filter(a => !a.is_read && !readIds.includes(a.id)).length ?? 0;
@@ -530,13 +533,13 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {isAlertsLoading ? (
+            {isEventsLoading ? (
               <div className="space-y-4">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <Skeleton key={i} className="h-16 rounded-xl" />
                 ))}
               </div>
-            ) : recentAlerts.length === 0 ? (
+            ) : recentEvents.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 gap-4 rounded-2xl border-2 border-dashed border-slate-200 bg-white animate-in fade-in duration-500">
                 <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <circle cx="36" cy="36" r="32" fill="#f8fafc"/>
@@ -560,57 +563,40 @@ export default function Dashboard() {
                 <div className="absolute left-[19px] top-3 bottom-3 w-px bg-slate-200" />
 
                 <div className="space-y-4">
-                  {recentAlerts.map((alert, i) => {
-                    const dot = levelDotClass[alert.level];
-                    const isUnread = !alert.is_read && !readIds.includes(alert.id);
-                    const name = patientMap[alert.patient_id] ?? alert.patient_id;
-                    const badgeColor =
-                      alert.level === 'critical' || alert.level === 'high'
-                        ? 'bg-red-50 text-red-600 border-red-200'
-                        : alert.level === 'medium'
-                        ? 'bg-amber-50 text-amber-600 border-amber-200'
-                        : 'bg-green-50 text-green-600 border-green-200';
-                    const badgeLabel =
-                      alert.level === 'critical' || alert.level === 'high' ? '위험'
-                      : alert.level === 'medium' ? '주의' : '양호';
+                  {recentEvents.map((event, i) => {
+                    const dot = eventSeverityDot(event.severity);
+                    const badge = eventSeverityBadge(event.severity);
+                    const name = patientMap[event.patient_id] ?? event.patient_id;
 
                     return (
                       <button
-                        key={alert.id}
-                        onClick={() => { markRead([alert.id]); navigate(`/dashboard/${alert.patient_id}`); }}
+                        key={event.id}
+                        onClick={() => navigate(`/dashboard/${event.patient_id}`)}
                         className="relative flex items-start gap-4 pl-10 w-full text-left animate-in fade-in slide-in-from-left-2 duration-300"
                         style={{ animationDelay: `${i * 40}ms` }}
                       >
                         {/* 타임라인 점 */}
                         <span className={`absolute left-[14px] top-[18px] size-2.5 rounded-full ring-2 ring-slate-50 ${dot}`} />
 
-                        <div className={`flex-1 rounded-2xl border bg-white px-5 py-4 transition-shadow hover:shadow-md hover:border-blue-200 cursor-pointer ${isUnread ? 'border-blue-200 bg-blue-50/30' : 'border-slate-100'}`}>
+                        <div className="flex-1 rounded-2xl border bg-white px-5 py-4 transition-shadow hover:shadow-md hover:border-blue-200 cursor-pointer border-slate-100">
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="text-sm font-bold text-slate-800">{name}</span>
                                 <span className="text-sm text-slate-400">어르신</span>
                                 <span className="text-sm text-slate-600">·</span>
-                                <span className="text-sm text-slate-600">{alert.alert_type}</span>
-                                {isUnread && (
-                                  <span className="text-[10px] font-bold bg-blue-500 text-white rounded-full px-1.5 py-0.5 leading-none">NEW</span>
-                                )}
+                                <span className="text-sm text-slate-600">{translateEventType(event.event_type)}</span>
                               </div>
-                              {alert.message && (
-                                <p className="text-xs text-slate-400 mt-1 truncate" title={alert.message}>
-                                  {alert.message}
-                                </p>
-                              )}
                             </div>
                             <div className="flex flex-col items-end gap-1.5 shrink-0">
-                              <Badge variant="outline" className={`text-xs ${badgeColor}`}>
-                                {badgeLabel}
+                              <Badge variant="outline" className={`text-xs ${badge.color}`}>
+                                {badge.label}
                               </Badge>
                               <span
                                 className="text-[11px] text-slate-400"
-                                title={formatKST(alert.ts_utc)}
+                                title={formatKST(event.ts_utc)}
                               >
-                                {relativeTime(alert.ts_utc, tick)}
+                                {relativeTime(event.ts_utc, tick)}
                               </span>
                             </div>
                           </div>
