@@ -99,6 +99,9 @@ export default function AdminDashboard() {
 
   useEffect(() => { fetchGuardians(); }, [fetchGuardians]);
 
+  // 어르신 검색
+  const [patientSearch, setPatientSearch] = useState('');
+
   // 보호자 검색 / 상세 모달
   const [guardianSearch, setGuardianSearch] = useState('');
   const [selectedGuardian, setSelectedGuardian] = useState<GuardianListItem | null>(null);
@@ -179,6 +182,15 @@ export default function AdminDashboard() {
       return rb.score - ra.score;
     });
   }, [patientData]);
+
+  // 검색어로 어르신 필터 (이름 또는 환자 ID)
+  const filteredPatients = useMemo(() => {
+    const q = patientSearch.trim().toLowerCase();
+    if (!q) return patients;
+    return patients.filter(
+      p => p.name.toLowerCase().includes(q) || p.patient_id.toLowerCase().includes(q)
+    );
+  }, [patients, patientSearch]);
 
   // 알림에 환자 이름 매핑
   const patientMap = useMemo(() => {
@@ -270,6 +282,29 @@ export default function AdminDashboard() {
             </button>
           </div>
 
+          {/* 검색 */}
+          {!pLoading && patients.length > 0 && (
+            <div className="mb-3 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-slate-500 pointer-events-none" />
+              <input
+                type="text"
+                value={patientSearch}
+                onChange={e => setPatientSearch(e.target.value)}
+                placeholder="이름 또는 환자 ID로 검색..."
+                className="w-full rounded-xl border border-slate-700 bg-slate-800/60 pl-9 pr-9 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-blue-500"
+              />
+              {patientSearch && (
+                <button
+                  type="button"
+                  onClick={() => setPatientSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+
           {pLoading ? (
             <div className="rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center text-sm text-slate-500">
               불러오는 중...
@@ -286,6 +321,10 @@ export default function AdminDashboard() {
                 첫 어르신 등록하기
               </button>
             </div>
+          ) : filteredPatients.length === 0 ? (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center text-sm text-slate-500">
+              검색 결과가 없습니다.
+            </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
               <table className="w-full text-sm">
@@ -300,7 +339,7 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {patients.map((p, idx) => {
+                  {filteredPatients.map((p, idx) => {
                     const rs = p.latest_risk_score;
                     const isDanger = rs && rs.risk_level === 'high';
                     return (
@@ -316,7 +355,10 @@ export default function AdminDashboard() {
                             {isDanger && (
                               <span className="size-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
                             )}
-                            <span className="font-medium text-white">{p.name} 어르신</span>
+                            <div className="flex flex-col leading-tight">
+                              <span className="font-medium text-white">{p.name} 어르신</span>
+                              <span className="text-[11px] font-mono text-slate-500">{p.patient_id}</span>
+                            </div>
                           </div>
                         </td>
                         <td className="px-5 py-3.5 text-slate-400">{p.gender ?? '-'}</td>
