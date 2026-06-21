@@ -101,9 +101,10 @@ function relativeTime(ts: string): string {
 }
 
 function severityBorderClass(cat: SeverityCategory): string {
-  if (cat === 'danger') return 'border-l-2 border-red-400 pl-2';
-  if (cat === 'warning') return 'border-l-2 border-yellow-400 pl-2';
-  return 'border-l-2 border-green-400 pl-2';
+  // 카테고리별 전체 테두리 + 옅은 배경색 — 위험(빨강)/주의(노랑)/안전(초록)
+  if (cat === 'danger') return 'border-red-300 bg-red-50';
+  if (cat === 'warning') return 'border-amber-300 bg-amber-50';
+  return 'border-emerald-300 bg-emerald-50';
 }
 
 const HEATMAP_BLOCK_LABELS = ['00-03시', '04-07시', '08-11시', '12-15시', '16-19시', '20-23시'];
@@ -763,7 +764,7 @@ export default function PatientDetail() {
                         return (
                           <li
                             key={event.id}
-                            className={`flex items-center gap-2.5 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 animate-in fade-in slide-in-from-right-2 duration-300 ${severityBorderClass(sevCat)}`}
+                            className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 animate-in fade-in slide-in-from-right-2 duration-300 ${severityBorderClass(sevCat)}`}
                             style={{ animationDelay: `${i * 80}ms` }}
                           >
                             <span className={`size-1.5 rounded-full shrink-0 ${severityColor}`} />
