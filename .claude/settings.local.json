@@ -44,7 +44,10 @@
       "PowerShell(npx tsc --noEmit)",
       "PowerShell(npm run build 2>&1)",
       "PowerShell(if \\(Test-Path dist\\) { Remove-Item dist -Recurse -Force }; npx vite build | Out-Null; \"EXIT=$LASTEXITCODE\"; if \\(Test-Path dist/index.html\\) { \"dist/index.html OK: \" + \\(Get-Item dist/index.html\\).LastWriteTime } else { \"NO dist/index.html\" })",
-      "PowerShell(git add -A)"
+      "PowerShell(git add -A)",
+      "PowerShell(git push origin main)",
+      "PowerShell(npx tsc -b 2>$null; \"TSC_EXIT=$LASTEXITCODE\")",
+      "PowerShell(\"---\")"
     ]
   }
 }

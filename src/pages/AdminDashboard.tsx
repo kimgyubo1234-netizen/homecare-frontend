@@ -5,6 +5,7 @@ import { useAuthStore } from '@/lib/auth-store';
 import { useReadStore } from '@/lib/read-store';
 import { usePatientList } from '@/hooks/usePatientList';
 import { useAlerts } from '@/hooks/useAlerts';
+import { useAllEvents } from '@/hooks/useAllEvents';
 import { formatKST } from '@/lib/format';
 import { useMutation } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
@@ -53,12 +54,30 @@ const levelLabel: Record<string, string> = {
   low:      '양호',
 };
 
+// 이벤트 severity(숫자) → 등급 라벨/색상 (다크 테마)
+function eventLevel(severity: number): { label: string; bg: string } {
+  if (severity >= 3) return { label: '위험', bg: 'bg-red-500/15 text-red-400' };
+  if (severity === 2) return { label: '주의', bg: 'bg-amber-500/10 text-amber-400' };
+  return { label: '양호', bg: 'bg-emerald-500/10 text-emerald-400' };
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { user, clearAuth } = useAuthStore();
   const { data: patientData, isLoading: pLoading } = usePatientList();
   const { data: alerts, isLoading: aLoading } = useAlerts({ days: 7 });
+  const { data: allEvents, isLoading: eLoading } = useAllEvents(200);
   const readIds = useReadStore((s) => s.readIds);
+
+  // 최근 7일 감지 이벤트 (최신순, 최대 20건)
+  const recentEvents = useMemo(() => {
+    if (!allEvents) return [];
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    return [...allEvents]
+      .filter(e => new Date(e.ts_utc).getTime() >= cutoff)
+      .sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())
+      .slice(0, 20);
+  }, [allEvents]);
 
   // 보호자 목록 — TanStack Query 캐시 우회, 직접 fetch
   const [guardianData, setGuardianData] = useState<GuardianListItem[]>([]);
@@ -329,16 +348,16 @@ export default function AdminDashboard() {
           )}
         </section>
 
-        {/* 최근 알림 */}
+        {/* 최근 감지 이벤트 */}
         <section>
-          <h2 className="mb-4 text-sm font-bold text-slate-300">최근 알림 (7일)</h2>
-          {aLoading ? (
+          <h2 className="mb-4 text-sm font-bold text-slate-300">최근 감지 (7일)</h2>
+          {eLoading ? (
             <div className="rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center text-sm text-slate-500">
               불러오는 중...
             </div>
-          ) : !alerts || alerts.length === 0 ? (
+          ) : recentEvents.length === 0 ? (
             <div className="rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center text-sm text-slate-500">
-              알림이 없습니다.
+              감지된 이벤트가 없습니다.
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
@@ -349,34 +368,30 @@ export default function AdminDashboard() {
                     <th className="px-5 py-3 font-medium">유형</th>
                     <th className="px-5 py-3 font-medium">등급</th>
                     <th className="px-5 py-3 font-medium">시각</th>
-                    <th className="px-5 py-3 font-medium">확인</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {alerts.slice(0, 20).map(a => (
-                    <tr
-                      key={a.id}
-                      className="cursor-pointer transition-colors hover:bg-slate-800/50"
-                      onClick={() => navigate(`/dashboard/${a.patient_id}`)}
-                    >
-                      <td className="px-5 py-3 font-medium text-white">
-                        {patientMap[a.patient_id] ? `${patientMap[a.patient_id]} 어르신` : a.patient_id}
-                      </td>
-                      <td className="px-5 py-3 text-slate-300">{translateAlertType(a.alert_type)}</td>
-                      <td className="px-5 py-3">
-                        <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${levelBg[a.level]}`}>
-                          {levelLabel[a.level]}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-xs text-slate-500">{formatKST(a.ts_utc)}</td>
-                      <td className="px-5 py-3 text-xs">
-                        {(a.is_read || readIds.includes(a.id))
-                          ? <span className="text-slate-600">확인됨</span>
-                          : <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-red-400 font-medium">미확인</span>
-                        }
-                      </td>
-                    </tr>
-                  ))}
+                  {recentEvents.map(e => {
+                    const lv = eventLevel(e.severity);
+                    return (
+                      <tr
+                        key={e.id}
+                        className="cursor-pointer transition-colors hover:bg-slate-800/50"
+                        onClick={() => navigate(`/dashboard/${e.patient_id}`)}
+                      >
+                        <td className="px-5 py-3 font-medium text-white">
+                          {patientMap[e.patient_id] ? `${patientMap[e.patient_id]} 어르신` : e.patient_id}
+                        </td>
+                        <td className="px-5 py-3 text-slate-300">{translateAlertType(e.event_type)}</td>
+                        <td className="px-5 py-3">
+                          <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${lv.bg}`}>
+                            {lv.label}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-xs text-slate-500">{formatKST(e.ts_utc)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
