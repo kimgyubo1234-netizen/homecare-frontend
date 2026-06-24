@@ -69,7 +69,9 @@
       "PowerShell(git commit -m 'style: �ֱ� ����/Ȱ��/�̺�Ʈ ����� 5�� ǥ�� �� ��ũ�ѷ� ����, ��ü���� ��ư ����')",
       "PowerShell(npx tsc -b; \"TSC_EXIT=$LASTEXITCODE\")",
       "PowerShell(git commit -m 'fix: �˸� �� ������ ��Ȯ�� �̺�Ʈ �������� ����, �г�/�˸������� �湮 �� Ȯ�� ó��')",
-      "PowerShell(git push)"
+      "PowerShell(git push)",
+      "Read(//c/Users/Public/Documents/졸작 프로젝트/프론트엔드 파일/docs/**)",
+      "PowerShell(git commit -m 'feat: �˸�/�̷� �ҽ��� raw �̺�Ʈ\\(/events\\)���� ��� ����\\(/api/v1/incidents\\)�� ��ü')"
     ]
   }
 }

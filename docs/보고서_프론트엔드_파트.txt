@@ -1,0 +1,1574 @@
+══════════════════════════════════════════════════════════════════
+  졸업작품 결과보고서 — 프론트엔드 담당 파트 (김규보)
+  프로젝트: 독거노인 케어서비스 (팀명: 이글아이)
+══════════════════════════════════════════════════════════════════
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3.2  시스템 구조도 및 알고리즘 (프론트엔드)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 전체 프론트엔드 아키텍처 구조
+
+프론트엔드는 Vite 8 + React 19 + TypeScript로 구성된 단일 페이지
+애플리케이션(SPA)으로, 다음과 같은 계층 구조로 설계되었다.
+
+  [ Browser SPA ]
+  ├── 라우팅 계층 : React Router v7
+  │     ├── AuthGuard  — 비인증 사용자 → /login 리다이렉트
+  │     ├── RoleGuard  — 권한 불일치 → 역할 별 리다이렉트
+  │     └── Pages
+  │           Login / Dashboard / PatientDetail / Alerts /
+  │           AdminDashboard / RegisterPatient / Profile / Landing
+  ├── 서버 상태 계층 : TanStack Query v5
+  │     ├── usePatientList   (60s 폴링)
+  │     ├── useDashboard     (15s 폴링)
+  │     ├── useAllEvents     (15s 폴링)
+  │     ├── usePatientEvents (15s 폴링)
+  │     └── useAlerts        (20s 폴링)
+  ├── 클라이언트 상태 계층 : Zustand v5 (persist → localStorage)
+  │     ├── auth-store   — token, user 객체
+  │     ├── read-store   — 읽은 이벤트 ID 배열
+  │     └── seen-store   — 알림 패널 마지막 확인 타임스탬프
+  ├── 실시간 계층
+  │     ├── SseProvider   — fetch 스트리밍으로 SSE 수신
+  │     └── VideoPlayer   — WebRTC WHEP 프로토콜 영상 수신
+  └── 공통 유틸리티
+        ├── apiFetch()    — 중앙 집중 HTTP 클라이언트
+        ├── formatKST()   — UTC→KST 변환
+        └── eventCategory() / riskLevelFromScore() — 분류 로직
+
+──────────────────────────────────────────────────────────────────
+■ 인증(Authentication) 흐름 알고리즘
+
+1. 사용자가 /login 화면에서 이메일·비밀번호 입력 후 제출
+2. react-hook-form + zod 스키마로 클라이언트 측 유효성 검사
+3. apiFetch()로 POST /api/v1/auth/login 요청
+4. 응답 { access_token, user } 수신
+5. Zustand auth-store.setAuth(token, user) 호출
+   → Zustand persist 미들웨어가 localStorage['auth']에 자동 저장
+6. user.role === 'admin' → /admin 이동, 아니면 → /dashboard 이동
+7. 이후 모든 API 요청: Authorization: Bearer <token> 헤더 자동 첨부
+8. 401 응답 수신 시: auth-store.clearAuth() → localStorage 삭제
+   → /login 리다이렉트 + 토스트 알림
+
+──────────────────────────────────────────────────────────────────
+■ SSE 실시간 이벤트 수신 흐름 알고리즘
+
+SseProvider는 인증 완료 후 HomeLayout이 마운트 되는 시점에 자동
+활성화되어, 서버에서 push하는 이벤트를 지속적으로 수신한다.
+
+1. fetch('GET /api/v1/alerts/stream',
+         { headers: { Authorization: 'Bearer <token>' } })
+   ※ EventSource API는 Authorization 헤더 전송 불가 → fetch 사용
+
+2. response.body.getReader()로 ReadableStream 청크 단위 읽기
+
+3. 텍스트를 UTF-8 디코딩 후 줄 단위 파싱
+   'data: {...}' 형식 라인 → JSON.parse()
+
+4. event.type 분기 처리:
+   ┌──────────────┬────────────────────────────────────────────┐
+   │ CONNECTED    │ 연결 성공 로그 출력, 재시도 카운터 리셋    │
+   │ PING         │ 무시 (heartbeat)                           │
+   │ ALERT        │ ① showAlertToast() — sonner 우측 상단 5s   │
+   │              │ ② playAlertSound() — Web Audio API          │
+   │              │    880Hz(0.2s) + 660Hz(0.3s) 사인파 합성   │
+   │              │ ③ showBrowserNotification() — Notification  │
+   │              │    API (권한 있을 때)                       │
+   │              │ ④ queryClient.invalidateQueries(           │
+   │              │    ['alerts','events-feed','patient-events',│
+   │              │    'dashboard'])                            │
+   │ RISK_SCORE   │ queryClient.invalidateQueries(             │
+   │              │ ['dashboard', patientId], ['patient-list']) │
+   └──────────────┴────────────────────────────────────────────┘
+
+5. 연결 끊김 감지 시 지수 백오프 자동 재연결:
+   RETRY_DELAYS = [1000, 2000, 5000, 10000, 30000] ms
+   → 마지막 지연값(30s)에서 고정 반복
+
+──────────────────────────────────────────────────────────────────
+■ WebRTC WHEP 영상 스트리밍 흐름 알고리즘
+
+mediamtx 미디어 서버가 WHEP(WebRTC-HTTP Egress Protocol)으로
+영상을 제공하며, 브라우저에서 직접 WebRTC 연결을 맺는다.
+
+1. VideoPlayer 컴포넌트 마운트 (streamPath prop 수신)
+2. RTCPeerConnection 생성 (ICE 서버 없음 — 동일 LAN/NAT 무관)
+3. 'video' + 'audio' recvonly 방향 transceiver 추가
+4. SDP Offer 내 코덱 우선순위 재정렬:
+   H264 페이로드를 맨 앞으로 이동 (mediamtx/libx264 호환)
+5. createOffer() → ICE Gathering Complete 이벤트 대기
+6. POST ${VITE_MEDIA_BASE}/viewer/${streamPath}/whep
+   Content-Type: application/sdp, 바디: SDP Offer 문자열
+7. 응답 SDP Answer → setRemoteDescription()
+8. connectionState 이벤트 모니터링:
+   'connected'     → onStatusChange(true), 영상 <video> 재생
+   'failed'        → 5000ms 후 RTCPeerConnection 재생성·재연결
+   'disconnected'  → 5000ms 후 재연결
+9. 컴포넌트 언마운트 시 peerConnection.close()
+
+──────────────────────────────────────────────────────────────────
+■ 이벤트 위험도 분류 알고리즘
+
+event_type 문자열 기반 카테고리 분류:
+  danger  (위험) : 'fall' | 'drop' | 'collision'
+  warning (주의) : 'abnormal' | 'inactive' | 'no_activity' |
+                   'stumble' | 'balance' | 'risk'
+  safe    (안전) : 'normal' | 'activity' | 'walking' |
+                   'standing' | 'sitting' | 'motion'
+
+risk_score(0~5) 기반 수준 분류:
+  score >= 5 → high   (위험, red-500)
+  score >= 3 → medium (주의, yellow-500)
+  score <  3 → low    (안전, green-500)
+
+──────────────────────────────────────────────────────────────────
+■ 알림 벨 배지 미확인 카운팅 알고리즘
+
+  allEvents = useAllEvents(200)  // 최근 200개 이벤트 목록
+  seenAt    = useSeenStore().seenAt  // 마지막 패널 확인 시각
+
+  unseenCount = allEvents.filter(e =>
+    (now - e.ts_utc) < 24시간  &&  e.ts_utc > seenAt
+  ).length
+
+  패널 열기: markSeen(현재 ISO timestamp)
+             → seenAt 갱신 → 다음 렌더에서 unseenCount = 0
+  브라우저 탭 타이틀: unseenCount > 0 → '(N) 어르신 안전 돌봄 서비스'
+
+──────────────────────────────────────────────────────────────────
+■ 액션 폴링(useActionPolling) 알고리즘
+
+  매 1500ms마다 GET /api/v1/events?patient_id=X&limit=1 요청
+  연속 실패 3회(FAILURE_LIMIT) 초과 → isConnected = false
+  최신 이벤트 ts_utc 기준으로 3000ms 초과 경과 → isDelayed = true
+  ActionOverlayPanel이 latestEvent로 행동 레이블·위험도 표시
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3.3  시스템 하드웨어 설계 (프론트엔드 개발 환경)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 프론트엔드 개발 PC
+
+  운영체제     : Windows 11 Home (64-bit)
+  런타임       : Node.js v20.x / npm v10.x
+  빌드 도구    : Vite 8.x
+  개발 IDE     : Visual Studio Code
+  버전 관리    : Git / GitHub
+  테스트 브라우저: Google Chrome 120+ (Chromium 기반)
+
+■ 백엔드 서버 (프론트엔드 연동 대상, 팀원 김진승 구축)
+
+  클라우드     : AWS EC2
+  공인 IP      : 54.116.119.98
+  도메인       : homecare.p-e.kr (HTTPS / TLS)
+  API 서버     : Flask (Python) — 포트 5000
+  데이터베이스 : PostgreSQL
+  미디어 서버  : mediamtx (WHEP/WebRTC 스트리밍)
+  오브젝트 스토리지: Amazon S3 (영상 클립)
+
+■ 클라이언트 실행 환경
+
+  브라우저     : Chrome / Edge (Chromium 계열) 권장
+  최소 해상도  : 1280px (데스크탑 우선 설계)
+  통신 방식    : HTTPS (REST API), SSE(fetch streaming),
+                 WebRTC WHEP (영상)
+  인증         : Bearer Token (JWT)
+  로컬 스토리지: auth / read-alerts / notif-seen (Zustand persist)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3.4  소프트웨어 모듈 상세 설계 (프론트엔드)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+──────────────────────────────────────────────────────────────────
+[모듈 1]  src/lib/api.ts — apiFetch<T>()
+──────────────────────────────────────────────────────────────────
+모듈명       : apiFetch<T>()
+입력 자료    : endpoint(string), options(RequestInit), 선택적 body
+출력 자료    : Promise<T> — 파싱된 JSON 응답 또는 에러 throw
+기능         : 모든 API 요청의 중앙 집중 처리
+               ① Authorization 헤더 자동 주입
+               ② Content-Type 자동 설정 (body 있을 때만)
+               ③ HTTP 상태코드별 커스텀 에러 throw
+               ④ 401 수신 시 auth-store.clearAuth() 호출
+호출모듈     : useAuthStore.getState(), UnauthorizedError,
+               ForbiddenError, NotFoundError, ServerError,
+               ClientError, NetworkError, ApiError
+
+모듈의 상세 설계:
+  function apiFetch<T>(endpoint, options):
+    token = useAuthStore.getState().token
+    headers = { ...options.headers }
+    if token → headers['Authorization'] = 'Bearer ' + token
+    if options.body → headers['Content-Type'] = 'application/json'
+
+    try:
+      res = await fetch(VITE_API_BASE + endpoint, { ...options, headers })
+    catch (네트워크 오류):
+      throw new NetworkError()
+
+    if res.ok:
+      if res.status === 204 → return null as T
+      return res.json()
+
+    body = res.json() catch → {}
+    errCode = body.error ?? 'unknown'
+
+    switch res.status:
+      401 → clearAuth(); throw new UnauthorizedError(errCode)
+      403 → throw new ForbiddenError(errCode)
+      404 → throw new NotFoundError(errCode)
+      400~499 → throw new ClientError(errCode)
+      500~599 → throw new ServerError(errCode)
+      else → throw new ApiError(errCode)
+
+──────────────────────────────────────────────────────────────────
+[모듈 2]  src/lib/auth-store.ts — Zustand 인증 상태 저장소
+──────────────────────────────────────────────────────────────────
+모듈명       : useAuthStore (Zustand + persist)
+입력 자료    : setAuth(token: string, user: User) /
+               clearAuth() 호출
+출력 자료    : token: string|null, user: User|null
+기능         : 로그인 토큰과 사용자 정보를 앱 전역에서 관리
+               Zustand persist 미들웨어로 localStorage['auth']에
+               자동 직렬화/역직렬화 (새로고침 후 유지)
+호출모듈     : zustand/persist, localStorage
+
+모듈의 상세 설계:
+  interface AuthState:
+    token: string | null
+    user:  User | null
+    setAuth(token, user): void
+    clearAuth(): void
+
+  useAuthStore = create<AuthState>()(
+    persist(
+      (set) => ({
+        token: null,
+        user:  null,
+        setAuth:   (token, user) => set({ token, user }),
+        clearAuth: ()            => set({ token: null, user: null }),
+      }),
+      { name: 'auth' }   // localStorage 키
+    )
+  )
+
+  셀렉터(Hooks):
+    useAuthToken()       → useAuthStore(s => s.token)
+    useAuthUser()        → useAuthStore(s => s.user)
+    useIsAuthenticated() → useAuthStore(s => s.token !== null)
+
+──────────────────────────────────────────────────────────────────
+[모듈 3]  src/lib/sse.ts — subscribeSse()
+──────────────────────────────────────────────────────────────────
+모듈명       : subscribeSse()
+입력 자료    : url(string), token(string),
+               onMessage(msg: SseMessage) => void,
+               signal: AbortSignal
+출력 자료    : void (비동기 스트리밍)
+기능         : fetch 기반 SSE 저수준 구현
+               EventSource는 Authorization 헤더 불가 → fetch 사용
+               ReadableStream을 청크 단위로 읽고 'data:' 라인 파싱
+               AbortSignal로 클린업 제어
+호출모듈     : fetch (브라우저 내장)
+
+모듈의 상세 설계:
+  async function subscribeSse(url, token, onMessage, signal):
+    res = await fetch(url, {
+      headers: { Authorization: 'Bearer ' + token,
+                 Accept: 'text/event-stream' },
+      signal
+    })
+
+    if not res.ok → throw new Error('SSE 연결 실패')
+
+    reader = res.body.getReader()
+    decoder = TextDecoder('utf-8')
+    buffer = ''
+
+    loop:
+      { value, done } = await reader.read()
+      if done → break
+      buffer += decoder.decode(value, { stream: true })
+
+      lines = buffer.split('\n')
+      buffer = lines.pop()  // 미완성 줄 보존
+
+      for line in lines:
+        if line.startsWith('data:'):
+          json = line.slice(5).trim()
+          try: onMessage(JSON.parse(json))
+
+──────────────────────────────────────────────────────────────────
+[모듈 4]  src/components/SseProvider.tsx — 실시간 이벤트 수신
+──────────────────────────────────────────────────────────────────
+모듈명       : SseProvider (React 컴포넌트)
+입력 자료    : (props 없음, 내부에서 auth-store에서 token 직접 읽음)
+출력 자료    : null 렌더 (UI 없음)
+              → queryClient 캐시 무효화, 토스트/사운드/알림 side-effect
+기능         : SSE 구독·관리 컴포넌트
+               ALERT 이벤트: 토스트, 사운드, 브라우저 알림 + 캐시 무효화
+               RISK_SCORE 이벤트: 대시보드·환자목록 캐시 무효화
+               지수 백오프 자동 재연결 (최대 30s 간격)
+호출모듈     : subscribeSse, useAuthToken, useQueryClient,
+               showAlertToast, playAlertSound, showBrowserNotification
+
+모듈의 상세 설계:
+  RETRY_DELAYS = [1000, 2000, 5000, 10000, 30000]
+  retryIdx = 0
+
+  useEffect(():
+    if not token → return
+    activeRef.current = true
+
+    async function connect():
+      try:
+        await subscribeSse(
+          '/api/v1/alerts/stream', token,
+          (msg) => {
+            if msg.type === 'CONNECTED': retryIdx = 0
+            if msg.type === 'ALERT':
+              showAlertToast(msg.data)
+              playAlertSound()            // Web Audio API
+              showBrowserNotification(msg.data)  // Notification API
+              queryClient.invalidateQueries(
+                ['alerts','events-feed','patient-events','dashboard'])
+            if msg.type === 'RISK_SCORE':
+              queryClient.invalidateQueries(
+                ['dashboard', msg.data.patient_id])
+              queryClient.invalidateQueries(['patient-list'])
+          },
+          abortController.signal
+        )
+      catch:
+        if not activeRef.current → return
+        delay = RETRY_DELAYS[min(retryIdx, last)]
+        retryIdx = min(retryIdx+1, last)
+        setTimeout(connect, delay)
+
+    connect()
+    return () => { activeRef.current = false; abortController.abort() }
+  , [token])
+
+  playAlertSound():
+    ctx = new AudioContext()
+    // 880Hz 사인파 0.2s + 660Hz 사인파 0.3s, gain 0.3
+
+  showBrowserNotification():
+    if Notification.permission === 'granted':
+      new Notification('⚠️ 위험 이벤트 감지', { body: msg.message })
+
+──────────────────────────────────────────────────────────────────
+[모듈 5]  src/components/VideoPlayer.tsx — WebRTC WHEP 영상 플레이어
+──────────────────────────────────────────────────────────────────
+모듈명       : VideoPlayer (React 컴포넌트)
+입력 자료    : streamPath: string,
+               onStatusChange?: (live: boolean) => void,
+               overlayPanel?: ReactNode
+출력 자료    : <video> 요소 렌더링 (라이브 스트리밍 또는 상태 UI)
+기능         : WHEP 프로토콜로 mediamtx 서버에 연결하여 실시간 영상 수신
+               상태: connecting(스피너) / live(영상) / error(WifiOff 아이콘)
+               연결 실패 시 5초 후 자동 재시도
+호출모듈     : RTCPeerConnection, fetch(SDP), VITE_MEDIA_BASE
+
+모듈의 상세 설계:
+  states: 'connecting' | 'live' | 'error'
+
+  async function startWhep(streamPath):
+    pc = new RTCPeerConnection({ iceServers: [] })
+    pc.addTransceiver('video', { direction: 'recvonly' })
+    pc.addTransceiver('audio', { direction: 'recvonly' })
+
+    // H264 코덱 선호 (mediamtx libx264 호환)
+    reorderSdpCodecs(pc, 'video', 'H264')
+
+    offer = await pc.createOffer()
+    await pc.setLocalDescription(offer)
+
+    // ICE Gathering 완료 대기
+    await new Promise(resolve =>
+      pc.onicegatheringstatechange = () =>
+        pc.iceGatheringState === 'complete' && resolve()
+    )
+
+    res = await fetch(
+      `${VITE_MEDIA_BASE}/viewer/${streamPath}/whep`,
+      { method: 'POST',
+        headers: { 'Content-Type': 'application/sdp',
+                   'Authorization': 'Bearer ' + token },
+        body: pc.localDescription.sdp }
+    )
+    if not res.ok → throw Error('WHEP 연결 실패')
+
+    answer = await res.text()
+    await pc.setRemoteDescription({ type: 'answer', sdp: answer })
+
+    pc.ontrack = (e) => { videoRef.current.srcObject = e.streams[0] }
+
+    pc.onconnectionstatechange = () =>:
+      if pc.connectionState === 'connected':
+        setState('live'); onStatusChange?.(true)
+      if pc.connectionState in ['failed','disconnected']:
+        setState('error'); onStatusChange?.(false)
+        setTimeout(() => startWhep(streamPath), 5000)
+
+  useEffect():
+    startWhep(streamPath)
+    return () => pc.close()
+
+──────────────────────────────────────────────────────────────────
+[모듈 6]  src/components/HomeLayout.tsx — 공통 레이아웃
+──────────────────────────────────────────────────────────────────
+모듈명       : HomeLayout (React 컴포넌트)
+입력 자료    : (없음 — React Router Outlet 사용)
+출력 자료    : 헤더 + <Outlet /> 렌더링
+기능         : 상단 고정 헤더(로고/알림벨/프로필/로그아웃) 제공
+               SseProvider, OnboardingTour, AlertPanel 마운트
+               unseenCount 배지를 알림 벨에 표시
+               브라우저 탭 타이틀에 미확인 수 반영
+호출모듈     : SseProvider, OnboardingTour, AlertPanel,
+               useAllEvents, useSeenStore, useAuthStore
+
+모듈의 상세 설계:
+  HomeLayout():
+    allEvents = useAllEvents(200)
+    { seenAt, markSeen } = useSeenStore()
+    [panelOpen, setPanelOpen] = useState(false)
+
+    unseenCount = useMemo():
+      now = Date.now()
+      seen = seenAt ? new Date(seenAt).getTime() : 0
+      return allEvents.filter(e =>
+        now - new Date(e.ts_utc) < 86400000  &&  // 24시간 이내
+        new Date(e.ts_utc).getTime() > seen
+      ).length
+
+    useEffect():
+      document.title = unseenCount > 0
+        ? `(${unseenCount}) 어르신 안전 돌봄 서비스`
+        : '어르신 안전 돌봄 서비스'
+
+    openPanel():
+      markSeen()         // seenAt 갱신 → 이후 unseenCount = 0
+      setPanelOpen(true)
+
+    render:
+      <SseProvider />
+      <OnboardingTour />
+      <AlertPanel open={panelOpen} onClose={() => setPanelOpen(false)} />
+      <header fixed>
+        [로고] [알림벨 + badge] [프로필] [관리자페이지] [로그아웃]
+      </header>
+      <main pt-14><Outlet /></main>
+
+──────────────────────────────────────────────────────────────────
+[모듈 7]  src/components/AuthGuard.tsx / RoleGuard.tsx
+──────────────────────────────────────────────────────────────────
+모듈명       : AuthGuard / RoleGuard (React 컴포넌트)
+입력 자료    : AuthGuard: children: ReactNode
+               RoleGuard: role: 'admin'|'guardian', children: ReactNode
+출력 자료    : children 렌더 또는 Navigate 컴포넌트 (리다이렉트)
+기능         : AuthGuard  — 비인증 사용자를 /login으로 강제 이동
+               RoleGuard  — 역할 불일치 시 admin → /admin,
+                            나머지 → /dashboard로 리다이렉트
+호출모듈     : useIsAuthenticated, useAuthUser, Navigate (react-router)
+
+모듈의 상세 설계:
+  AuthGuard({ children }):
+    isAuth = useIsAuthenticated()
+    if not isAuth → return <Navigate to="/login" replace />
+    return <>{children}</>
+
+  RoleGuard({ role, children }):
+    user = useAuthUser()
+    if user?.role !== role:
+      if user?.role === 'admin' → return <Navigate to="/admin" replace />
+      else → return <Navigate to="/dashboard" replace />
+    return <>{children}</>
+
+──────────────────────────────────────────────────────────────────
+[모듈 8]  src/components/AlertPanel.tsx — 슬라이드 알림 패널
+──────────────────────────────────────────────────────────────────
+모듈명       : AlertPanel (React 컴포넌트)
+입력 자료    : open: boolean, onClose: () => void
+출력 자료    : 우측 슬라이드 패널(w-96) 렌더링
+기능         : 최근 이벤트 목록을 슬라이드 패널로 표시
+               필터: 전체 / 오늘 / 위험
+               이벤트 클릭 → /dashboard/${patient_id} 이동
+               Escape 키로 패널 닫기
+               최대 50건, 최신순 정렬
+호출모듈     : useAllEvents, eventLevelCategory, formatKST,
+               useNavigate
+
+모듈의 상세 설계:
+  AlertPanel({ open, onClose }):
+    [filter, setFilter] = useState('all')  // 'all'|'today'|'danger'
+    { data: events } = useAllEvents(200)
+
+    filtered = useMemo():
+      if filter === 'today' → events where ts_utc >= 오늘 0시
+      if filter === 'danger' → events where eventLevelCategory === 'danger'
+      else → all events
+      → 최신순 정렬, slice(0, 50)
+
+    useEffect():
+      keydown('Escape') → onClose()
+
+    render (open 시 translate-x-0, 닫힐 시 translate-x-full):
+      [전체|오늘|위험] 필터 탭
+      filtered.map(event =>
+        <div onClick={() => navigate(`/dashboard/${event.patient_id}`)}>
+          위험도 색상 좌측 테두리
+          이벤트 유형(번역) + 환자ID + KST 시각
+        </div>
+      )
+      <footer> → /alerts 전체보기 링크 </footer>
+
+──────────────────────────────────────────────────────────────────
+[모듈 9]  src/components/streaming/ActionOverlayPanel.tsx
+──────────────────────────────────────────────────────────────────
+모듈명       : ActionOverlayPanel (React 컴포넌트)
+입력 자료    : patientId: string
+출력 자료    : 영상 위 오버레이 UI (행동 레이블 + 위험 레벨 표시)
+기능         : useActionPolling에서 수신한 최신 이벤트를 영상 위에 표시
+               행동 레이블 변경 시 300ms opacity fade 애니메이션
+               DANGER 상태 → animate-danger-pulse CSS 클래스 적용
+               연결 끊김 / 지연 상태 UI 표시
+호출모듈     : useActionPolling, ACTIVITY_LABEL_KO, RISK_COLOR
+
+모듈의 상세 설계:
+  ActionOverlayPanel({ patientId }):
+    { latestEvent, isConnected, isDelayed } = useActionPolling(patientId)
+    [visible, setVisible] = useState(true)
+
+    // 레이블 변경 시 fade 처리
+    useEffect([latestEvent]):
+      setVisible(false)
+      setTimeout(() => setVisible(true), 150)
+
+    riskLabel = latestEvent?.risk_label ?? 'NORMAL'
+    colors    = RISK_COLOR[riskLabel]
+
+    render:
+      <div 오버레이 위치>
+        if not isConnected → '연결 끊김' 표시
+        if isDelayed → '데이터 지연' 경고
+        <행동 레이블 배지
+          style={{ opacity: visible ? 1 : 0, transition: '300ms' }}
+          className={riskLabel === 'DANGER' ? 'animate-danger-pulse' : ''}
+        >
+          {ACTIVITY_LABEL_KO[latestEvent.activity_label]}
+        </행동 레이블 배지>
+        <위험도 배지 colors.bg colors.text>
+          {colors.label}
+        </위험도 배지>
+      </div>
+
+──────────────────────────────────────────────────────────────────
+[모듈 10]  src/hooks/useActionPolling.ts
+──────────────────────────────────────────────────────────────────
+모듈명       : useActionPolling(patientId, intervalMs?)
+입력 자료    : patientId: string, intervalMs: number (기본 1500)
+출력 자료    : { latestEvent: ActionEvent|null,
+                isConnected: boolean, isDelayed: boolean }
+기능         : 1.5초 간격으로 최신 이벤트 1건 폴링
+               연속 3회 실패(FAILURE_LIMIT) → isConnected = false
+               이벤트가 3초(delayThresholdMs) 이상 오래됨 → isDelayed = true
+호출모듈     : apiFetch, useRef, useEffect, useState
+
+모듈의 상세 설계:
+  FAILURE_LIMIT = 3
+  delayThresholdMs = 3000
+
+  useActionPolling(patientId, intervalMs=1500):
+    [latestEvent, setLatestEvent] = useState(null)
+    [isConnected, setIsConnected] = useState(true)
+    [isDelayed, setIsDelayed]     = useState(false)
+    failCount = useRef(0)
+
+    useEffect():
+      interval = setInterval(async () => {
+        try:
+          data = await apiFetch(
+            `/api/v1/events?patient_id=${patientId}&limit=1`)
+          event = data.items[0] ?? null
+          setLatestEvent(event)
+          failCount.current = 0
+          setIsConnected(true)
+          if event:
+            age = Date.now() - new Date(event.ts_utc).getTime()
+            setIsDelayed(age > delayThresholdMs)
+        catch:
+          failCount.current += 1
+          if failCount.current >= FAILURE_LIMIT:
+            setIsConnected(false)
+      }, intervalMs)
+      return () => clearInterval(interval)
+    , [patientId, intervalMs])
+
+    return { latestEvent, isConnected, isDelayed }
+
+──────────────────────────────────────────────────────────────────
+[모듈 11]  src/hooks/useDashboard.ts
+──────────────────────────────────────────────────────────────────
+모듈명       : useDashboard(patientId)
+입력 자료    : patientId: string | undefined
+출력 자료    : TanStack Query 결과 (DashboardResponse)
+기능         : 환자별 대시보드 데이터를 TanStack Query로 캐싱+폴링
+               staleTime: 10s, refetchInterval: 15s
+               SSE RISK_SCORE 이벤트 수신 시 즉시 캐시 무효화
+호출모듈     : useQuery, apiFetch
+
+모듈의 상세 설계:
+  useDashboard(patientId):
+    return useQuery({
+      queryKey: ['dashboard', patientId],
+      queryFn:  () => apiFetch(`/api/v1/dashboard?patient_id=${patientId}`),
+      enabled:  patientId !== undefined,
+      staleTime:       10_000,
+      refetchInterval: 15_000,
+    })
+
+──────────────────────────────────────────────────────────────────
+[모듈 12]  src/hooks/useAllEvents.ts / usePatientEvents.ts
+──────────────────────────────────────────────────────────────────
+모듈명       : useAllEvents(limit) / usePatientEvents(patientId, limit)
+입력 자료    : limit: number / patientId: string, limit: number
+출력 자료    : EventItem[] (items 배열)
+기능         : 전체 or 특정 환자의 최근 이벤트 목록 폴링
+               refetchInterval: 15s
+               SSE ALERT 이벤트 수신 시 즉시 캐시 무효화
+호출모듈     : useQuery, apiFetch
+
+모듈의 상세 설계:
+  useAllEvents(limit=200):
+    return useQuery({
+      queryKey: ['events-feed', limit],
+      queryFn:  () => apiFetch(`/api/v1/events?limit=${limit}`)
+                      .then(d => d.items),
+      refetchInterval: 15_000,
+    })
+
+  usePatientEvents(patientId, limit=200):
+    return useQuery({
+      queryKey: ['patient-events', patientId, limit],
+      queryFn:  () => apiFetch(
+                  `/api/v1/events?patient_id=${patientId}&limit=${limit}`)
+                      .then(d => d.items),
+      enabled:  !!patientId,
+      refetchInterval: 15_000,
+    })
+
+──────────────────────────────────────────────────────────────────
+[모듈 13]  src/hooks/usePatientList.ts
+──────────────────────────────────────────────────────────────────
+모듈명       : usePatientList()
+입력 자료    : 없음
+출력 자료    : PatientListItem[] (patients 배열)
+기능         : 전체 환자 목록 및 최신 위험점수 폴링
+               refetchInterval: 60s
+               select: data.patients 추출
+호출모듈     : useQuery, apiFetch
+
+모듈의 상세 설계:
+  usePatientList():
+    return useQuery({
+      queryKey: ['patient-list'],
+      queryFn:  () => apiFetch('/api/v1/patients'),
+      select:   (data) => data.patients,
+      refetchInterval: 60_000,
+    })
+
+──────────────────────────────────────────────────────────────────
+[모듈 14]  src/lib/event-labels.ts — 이벤트 분류 유틸리티
+──────────────────────────────────────────────────────────────────
+모듈명       : event-labels.ts (유틸리티 모듈)
+입력 자료    : event_type: string
+출력 자료    : 카테고리 문자열 / 배지 컴포넌트 / 한국어 레이블
+기능         : event_type 기반 위험도 카테고리 분류
+               한국어 이벤트 유형명 변환
+               색상 배지 / 아이콘 도트 생성
+호출모듈     : (없음 — 순수 함수)
+
+모듈의 상세 설계:
+  eventCategory(event_type: string): 'danger'|'warning'|'safe'
+    DANGER_TYPES  = ['fall','drop','collision']
+    WARNING_TYPES = ['abnormal','inactive','no_activity',
+                     'stumble','balance','risk']
+    if event_type includes DANGER_TYPES  → 'danger'
+    if event_type includes WARNING_TYPES → 'warning'
+    else → 'safe'
+
+  translateEventType(event_type): string
+    매핑 테이블:
+      fall → '낙상', drop → '쓰러짐', collision → '충돌',
+      abnormal → '이상 행동', inactive → '비활동',
+      no_activity → '장기 무활동', normal → '정상',
+      activity → '활동', walking → '보행', ...등 20여 종
+
+  eventSeverityBadge(event_type): JSX.Element
+    category = eventCategory(event_type)
+    danger  → <Badge red>위험</Badge>
+    warning → <Badge yellow>주의</Badge>
+    safe    → <Badge green>안전</Badge>
+
+──────────────────────────────────────────────────────────────────
+[모듈 15]  src/lib/risk.ts — 위험도 점수 유틸리티
+──────────────────────────────────────────────────────────────────
+모듈명       : risk.ts (유틸리티 모듈)
+입력 자료    : score: number / events: EventItem[]
+출력 자료    : 'high'|'medium'|'low' / 평균 위험 점수(0~5)
+기능         : 숫자 점수를 high/medium/low 레벨로 변환
+               최근 이벤트 배열에서 평균 위험점수 계산
+호출모듈     : (없음 — 순수 함수)
+
+모듈의 상세 설계:
+  riskLevelFromScore(score: number): 'high'|'medium'|'low'
+    if score >= 5 → 'high'
+    if score >= 3 → 'medium'
+    else → 'low'
+
+  avgRiskScore(events: EventItem[]): number
+    now = Date.now()
+    recent5min  = events.filter(e => now - e.ts_utc < 300_000)
+    window      = recent5min.length > 0 ? recent5min
+                                        : events.slice(0, 10)
+    if window.length === 0 → return 0
+    avg = sum(window.map(e => e.risk_score)) / window.length
+    return avg * 5   // 0~1 스케일을 0~5로 변환
+
+──────────────────────────────────────────────────────────────────
+[모듈 16]  src/lib/format.ts — 날짜·나이 포맷 유틸리티
+──────────────────────────────────────────────────────────────────
+모듈명       : format.ts (유틸리티 모듈)
+입력 자료    : isoUtcString: string / birthDateString: string
+출력 자료    : 'YYYY-MM-DD HH:mm' (KST) / 나이(정수)
+기능         : UTC ISO 문자열을 KST 로컬 시간으로 변환하여 표시
+               생년월일 문자열로부터 현재 나이 계산
+호출모듈     : Intl.DateTimeFormat (브라우저 내장)
+
+모듈의 상세 설계:
+  formatKST(isoUtcString: string): string
+    return new Intl.DateTimeFormat('ko-KR', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    }).format(new Date(isoUtcString))
+
+  formatAge(birthDateString: string): number
+    birth = new Date(birthDateString)
+    today = new Date()
+    age   = today.getFullYear() - birth.getFullYear()
+    // 생일 미경과 시 1세 감산
+    if (오늘 월/일) < (생일 월/일) → age -= 1
+    return age
+
+──────────────────────────────────────────────────────────────────
+[모듈 17]  src/lib/read-store.ts / seen-store.ts — 알림 상태 저장소
+──────────────────────────────────────────────────────────────────
+모듈명       : useReadStore / useSeenStore (Zustand + persist)
+입력 자료    : markRead(ids: number[]) / markSeen(ts?: string)
+출력 자료    : readIds: number[] / seenAt: string|null
+기능         : read-store  — 읽음 처리된 이벤트 ID 집합 (localStorage)
+               seen-store  — 알림 패널 마지막 확인 시각 (localStorage)
+               두 저장소 모두 새로고침 후 상태 유지
+호출모듈     : zustand/persist
+
+모듈의 상세 설계:
+  useReadStore = create(persist(
+    (set, get) => ({
+      readIds: [],
+      markRead: (ids) => set({ readIds:
+        [...new Set([...get().readIds, ...ids])] }),
+      isRead: (id) => get().readIds.includes(id),
+    }),
+    { name: 'read-alerts' }
+  ))
+
+  useSeenStore = create(persist(
+    (set) => ({
+      seenAt: null,
+      markSeen: (ts) => set({ seenAt: ts ?? new Date().toISOString() }),
+    }),
+    { name: 'notif-seen' }
+  ))
+
+──────────────────────────────────────────────────────────────────
+[모듈 18]  src/pages/Login.tsx — 로그인 페이지
+──────────────────────────────────────────────────────────────────
+모듈명       : Login (React 페이지 컴포넌트)
+입력 자료    : 이메일, 비밀번호 (사용자 입력)
+출력 자료    : 로그인 성공 시 /dashboard 또는 /admin 이동
+              실패 시 에러 배너 표시
+기능         : 이메일·비밀번호 zod 스키마 유효성 검사
+               POST /api/v1/auth/login → Zustand 토큰 저장
+               역할(role)에 따라 분기 이동
+               UnauthorizedError / NetworkError 별도 배너 출력
+               비밀번호 표시/숨김 토글
+호출모듈     : useForm(react-hook-form), zodResolver, apiFetch,
+               useAuthStore, useNavigate
+
+모듈의 상세 설계:
+  loginSchema = z.object({
+    email:    z.string().email('유효한 이메일을 입력하세요'),
+    password: z.string().min(1, '비밀번호를 입력하세요'),
+  })
+
+  Login():
+    form = useForm({ resolver: zodResolver(loginSchema) })
+    [error, setError] = useState(null)
+    [showPw, setShowPw] = useState(false)
+    { setAuth } = useAuthStore()
+
+    onSubmit({ email, password }):
+      try:
+        { access_token, user } = await apiFetch('/api/v1/auth/login',
+          { method: 'POST', body: JSON.stringify({ email, password }) })
+        setAuth(access_token, user)
+        navigate(user.role === 'admin' ? '/admin' : '/dashboard',
+                 { replace: true })
+      catch UnauthorizedError:
+        setError('이메일 또는 비밀번호가 올바르지 않습니다')
+      catch NetworkError:
+        setError('서버에 연결할 수 없습니다')
+
+    render:
+      [좌측 브랜드 패널] [우측 로그인 폼]
+      이메일 입력 / 비밀번호 입력 (토글) / 에러 배너 / 로그인 버튼
+
+──────────────────────────────────────────────────────────────────
+[모듈 19]  src/pages/Dashboard.tsx — 대시보드 페이지
+──────────────────────────────────────────────────────────────────
+모듈명       : Dashboard (React 페이지 컴포넌트)
+입력 자료    : (없음 — usePatientList, useAllEvents에서 자동 조회)
+출력 자료    : 환자 현황 그리드, 통계 카드, 최근 활동 피드 렌더링
+기능         : 전체 환자 목록을 카드 그리드(3열)로 표시
+               위험 점수 색상 게이지 바 + 애니메이션 (1500ms CSS)
+               숫자 카운트업 애니메이션 (easeOut cubic)
+               WHEP 카메라 온라인 상태 도트 (useWhepStatus)
+               최근 활동 타임라인 (오늘/이번주/전체 필터)
+               Sonar pulse 애니메이션 (위험 상태 시)
+호출모듈     : usePatientList, useAllEvents, useWhepStatus,
+               useCountUp, riskLevelFromScore, formatKST
+
+모듈의 상세 설계:
+  Dashboard():
+    { data: patients } = usePatientList()
+    { data: events }   = useAllEvents(200)
+
+    // 통계 계산
+    countPatients = patients?.length ?? 0
+    countUnread   = events?.filter(e => !isRead(e.id)).length ?? 0
+    countCritical = events?.filter(e =>
+                      eventCategory(e.event_type) === 'danger').length ?? 0
+
+    // 숫자 카운트업 (easeOut cubic)
+    animPatients = useCountUp(countPatients, 800)
+    animUnread   = useCountUp(countUnread,   800)
+    animCritical = useCountUp(countCritical, 800)
+
+    // 전체 위험 상태 판별
+    overallStatus = countCritical > 0 ? 'danger'
+                  : countUnread   > 0 ? 'warning' : 'safe'
+
+    render:
+      [Hero 그라디언트 (blue/amber/red by overallStatus)]
+      [통계 3개 카드: 환자수 / 미확인 / 위험]
+      [환자 카드 그리드]
+        각 PatientCard:
+          이니셜 아바타 + 이름 + 위험 레벨 배지
+          WHEP 카메라 온라인 도트 (useWhepStatus)
+          위험 게이지 바 (risk_score → width%)
+          최근 이벤트 시각
+      [최근 활동 피드 (오늘/이번주/전체 탭)]
+
+──────────────────────────────────────────────────────────────────
+[모듈 20]  src/pages/PatientDetail.tsx — 환자 상세 페이지
+──────────────────────────────────────────────────────────────────
+모듈명       : PatientDetail (React 페이지 컴포넌트)
+입력 자료    : patientId: string (URL params)
+출력 자료    : 영상 플레이어, 위험점수 게이지, 이벤트 목록, 분석 차트
+기능         : WHEP 실시간 영상 (col-span-8) + ActionOverlayPanel
+               SVG 반원 위험 게이지 (RiskGauge) 애니메이션
+               세그먼트 바 (RiskSegmentBar) — 색상별 구간
+               최근 이벤트 목록 (max-h-[260px] 스크롤)
+               차트 3탭: 7일 누적 바차트 / 시간대별 활동 / 7일 히트맵
+               PDF 출력 (window.print(), 숨겨진 print-div)
+               이전/다음 환자 이동 (prev/next 네비게이션)
+               응급연락 버튼 (admin 전용)
+호출모듈     : useDashboard, usePatientEvents, useActionPolling,
+               VideoPlayer, ActionOverlayPanel, BarChart (recharts),
+               riskLevelFromScore, formatKST
+
+모듈의 상세 설계:
+  PatientDetail():
+    { patientId } = useParams()
+    { data: dashboard }  = useDashboard(patientId)
+    { data: events }     = usePatientEvents(patientId, 200)
+    { data: patients }   = usePatientList()
+
+    // 이전/다음 환자 인덱스
+    currentIdx = patients?.findIndex(p => p.patient_id === patientId)
+    prevId = patients?.[currentIdx - 1]?.patient_id
+    nextId = patients?.[currentIdx + 1]?.patient_id
+
+    // 차트 데이터 (recharts)
+    chartData7d = events grouped by date (last 7 days)
+                  → { date, danger, warning, safe } per day
+
+    // PDF 출력
+    handlePrint():
+      window.print()  // @media print CSS로 print-div만 표시
+
+    render:
+      [Hero 그라디언트 + 이전/다음 버튼]
+      [환자 정보 카드: 이름/나이/성별/기기]
+      [col-span-8: VideoPlayer + ActionOverlayPanel]
+      [col-span-4: RiskGauge(SVG) + RiskSegmentBar + 위험수준]
+      [최근 이벤트 목록 (스크롤)]
+      [차트 탭: 7일 바차트 / 시간대 그리드 / 히트맵]
+      [PDF 출력 버튼] [알림 보기 링크]
+
+──────────────────────────────────────────────────────────────────
+[모듈 21]  src/pages/Alerts.tsx — 알림/이벤트 이력 페이지
+──────────────────────────────────────────────────────────────────
+모듈명       : Alerts (React 페이지 컴포넌트)
+입력 자료    : URL SearchParams (patient_id, source, levels)
+출력 자료    : 알림 이력 목록 (날짜 그룹 or 테이블 뷰)
+기능         : URL 파라미터로 필터 상태 관리
+               두 가지 뷰 모드: 날짜 그룹 이력 / 테이블(shadcn Table)
+               개별 읽음 처리 및 전체 읽음 처리
+               미읽음 카운트 배지
+               페이지 방문 시 markSeen() 호출 (벨 배지 리셋)
+호출모듈     : useAllEvents, useReadStore, useSeenStore,
+               URLSearchParams, useSearchParams
+
+모듈의 상세 설계:
+  Alerts():
+    [searchParams, setSearchParams] = useSearchParams()
+    filter_patientId = searchParams.get('patient_id')
+    filter_levels    = searchParams.getAll('levels')
+
+    { data: events } = useAllEvents(200)
+    { readIds, markRead, isRead } = useReadStore()
+    { markSeen } = useSeenStore()
+
+    // 방문 시 확인 처리
+    useEffect(): markSeen()
+
+    // 날짜 그룹
+    alertsByDate = useMemo():
+      filtered = events filtered by searchParams
+      map = new Map<string, EventItem[]>()
+      filtered.forEach(e => {
+        key = formatKST(e.ts_utc).slice(0,10)  // 'YYYY-MM-DD'
+        map.get(key).push(e)
+      })
+      return map sorted 최신순
+
+    markAllRead():
+      markRead(events.map(e => e.id))
+
+    render:
+      [필터 바: 환자 선택 / 위험도 필터 / 뷰 토글]
+      [전체 읽음 버튼 + 미읽음 N건 배지]
+      if 이력 뷰:
+        alertsByDate.entries() → 날짜 헤더 + 이벤트 행
+      if 테이블 뷰:
+        <Table> shadcn 테이블 컴포넌트
+
+──────────────────────────────────────────────────────────────────
+[모듈 22]  src/pages/AdminDashboard.tsx — 관리자 대시보드
+──────────────────────────────────────────────────────────────────
+모듈명       : AdminDashboard (React 페이지 컴포넌트)
+입력 자료    : (없음 — admin role 접근 시 자동 조회)
+출력 자료    : 통계 카드, 환자 테이블, 보호자 관리 폼, 이벤트 테이블
+기능         : slate-950 다크 테마
+               환자 목록을 위험점수 내림차순 정렬하여 표
+               보호자 목록 테이블 + 등록 폼 (email/password/patient_ids)
+               보호자 삭제 (confirm 다이얼로그 모달)
+               TanStack useMutation으로 등록/삭제 처리
+               7일 최근 이벤트 테이블 (20행, 290px 스크롤)
+               이메일 or patient_id로 보호자 검색
+호출모듈     : usePatientList, useAllEvents, useMutation, apiFetch,
+               useAuthToken
+
+모듈의 상세 설계:
+  AdminDashboard():
+    { data: patients } = usePatientList()
+    { data: events }   = useAllEvents(200)
+    [guardians, setGuardians] = useState([])
+    [search, setSearch] = useState('')
+
+    // 보호자 목록 직접 fetch (쿼리 캐시 불사용)
+    useEffect(): apiFetch('/api/v1/admin/guardians') → setGuardians
+
+    // 등록 Mutation
+    registerGuardian = useMutation:
+      mutationFn: (form) => apiFetch('/api/v1/admin/guardians/register',
+                            { method:'POST', body: JSON.stringify(form) })
+      onSuccess: → 목록 갱신, 폼 리셋
+
+    // 삭제 Mutation
+    deleteGuardian = useMutation:
+      mutationFn: (id) => apiFetch(`/api/v1/admin/guardians/${id}`,
+                            { method:'DELETE' })
+      onSuccess: → 목록에서 제거
+
+    // 환자 위험점수 정렬
+    sortedPatients = patients?.sort((a,b) =>
+      (b.latest_risk_score?.score ?? 0) - (a.latest_risk_score?.score ?? 0))
+
+    render (dark theme slate-950):
+      [통계 4개 카드]
+      [환자 리스트 테이블]
+      [보호자 관리: 검색 + 테이블 + 등록 폼 + 삭제 confirm 모달]
+      [최근 이벤트 테이블 (7일, max 20행)]
+
+──────────────────────────────────────────────────────────────────
+[모듈 23]  src/pages/RegisterPatient.tsx — 환자 등록 3단계 위저드
+──────────────────────────────────────────────────────────────────
+모듈명       : RegisterPatient (React 페이지 컴포넌트)
+입력 자료    : 1단계: 이름, 생년월일, 성별
+               2단계: 기기 키(deviceKey), 스트림 경로(streamPath), 비고
+               3단계: 확인 화면 후 최종 제출
+출력 자료    : 등록 성공 토스트 + /dashboard 이동
+기능         : 3단계 위저드 UI (프로그레스 바 + 단계 인디케이터)
+               Admin: POST /api/v1/admin/patients/register 후
+                      반환된 patient_id로 POST /api/v1/admin/devices/register
+               Guardian: 토스트만 표시 (mock)
+               각 단계 필드 유효성 검사 후 다음 단계 이동
+호출모듈     : apiFetch, useAuthUser, useNavigate, sonner toast
+
+모듈의 상세 설계:
+  RegisterPatient():
+    [step, setStep] = useState(1)  // 1, 2, 3
+    [formData, setFormData] = useState({ name:'', birthDate:'',
+      gender:'', deviceKey:'', streamPath:'', notes:'' })
+    user = useAuthUser()
+
+    handleNext(stepData):
+      setFormData(prev => { ...prev, ...stepData })
+      setStep(step + 1)
+
+    handleSubmit():
+      // Admin 역할: 실제 API 호출
+      if user.role === 'admin':
+        { patient_id } = await apiFetch(
+          '/api/v1/admin/patients/register',
+          { method:'POST', body: JSON.stringify({
+              name, birth_date, gender, notes }) })
+        await apiFetch('/api/v1/admin/devices/register',
+          { method:'POST', body: JSON.stringify({
+              patient_id, device_key: deviceKey,
+              stream_path: streamPath }) })
+        toast.success('환자 등록 완료')
+        navigate('/dashboard')
+      // Guardian 역할: mock
+      else:
+        toast.info('관리자가 등록을 처리합니다')
+
+    render:
+      [프로그레스 바 (33% / 66% / 100%)]
+      [단계 인디케이터 ①②③]
+      if step === 1: 이름/생년월일/성별 폼
+      if step === 2: deviceKey/streamPath/비고 폼
+      if step === 3: 입력 확인 테이블 + 제출 버튼
+
+──────────────────────────────────────────────────────────────────
+[모듈 24]  src/lib/query-client.ts — TanStack QueryClient 설정
+──────────────────────────────────────────────────────────────────
+모듈명       : queryClient (QueryClient 인스턴스)
+입력 자료    : (없음 — 앱 전역 싱글턴)
+출력 자료    : QueryClient 인스턴스
+기능         : 전역 에러 핸들러 설정
+               기본 staleTime: 30s, refetchOnWindowFocus: false
+               401 → 토스트 + /login 리다이렉트
+               NetworkError / ServerError → 에러 토스트
+호출모듈     : TanStack QueryClient, QueryCache, toast(sonner)
+
+모듈의 상세 설계:
+  queryClient = new QueryClient({
+    queryCache: new QueryCache({
+      onError: (error) => {
+        if error instanceof UnauthorizedError:
+          toast.error('로그인이 필요합니다')
+          navigate('/login')
+        else if error instanceof NetworkError:
+          toast.error('네트워크 오류가 발생했습니다')
+        else if error instanceof ServerError:
+          toast.error('서버 오류가 발생했습니다')
+      }
+    }),
+    defaultOptions: {
+      queries: {
+        staleTime: 30_000,
+        refetchOnWindowFocus: false,
+      }
+    }
+  })
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3.5  테스트 절차 및 결과 (프론트엔드)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 테스트 1 — 인증 흐름 (로그인/로그아웃/리다이렉트)
+
+  테스트 절차:
+  1. /login 페이지에서 올바른 이메일·비밀번호 입력 후 로그인
+  2. localStorage['auth']에 token, user 저장 여부 확인
+     (DevTools → Application → Local Storage)
+  3. 역할별 리다이렉트 확인:
+     admin 계정 → /admin, guardian 계정 → /dashboard
+  4. /dashboard URL 직접 입력 후 AuthGuard 동작 확인
+     (미로그인 상태에서 → /login 이동)
+  5. 잘못된 비밀번호 입력 시 에러 배너 메시지 확인
+  6. 로그아웃 버튼 클릭 → localStorage 삭제 → /login 이동 확인
+
+  테스트 결과:
+  - 정상 로그인 시 token이 localStorage에 저장되고 역할에 따라
+    /admin 또는 /dashboard로 정상 이동함을 확인
+  - 비인증 상태에서 보호 경로 접근 시 /login으로 즉시 리다이렉트
+    되는 것을 확인
+  - 잘못된 비밀번호 입력 시 '이메일 또는 비밀번호가 올바르지 않습니다'
+    배너가 표시됨을 확인
+  - 로그아웃 후 localStorage가 정리되고 /login으로 이동함을 확인
+
+──────────────────────────────────────────────────────────────────
+■ 테스트 2 — SSE 실시간 이벤트 수신
+
+  테스트 절차:
+  1. 로그인 후 /dashboard 접속 → SseProvider가 마운트됨을 확인
+     (DevTools Network 탭 → alerts/stream 연결 상태 확인)
+  2. 백엔드(Pi5)에서 낙상 이벤트 발생 시:
+     a. 우측 상단 소너 토스트 알림 표시 여부 확인
+     b. 브라우저 알림(Notification API) 표시 여부 확인
+     c. 경보음(사인파) 재생 여부 확인
+     d. 알림 벨 배지 카운트 증가 여부 확인
+  3. 네트워크 강제 차단 후 SSE 재연결 지수 백오프 동작 확인
+     (1s → 2s → 5s → 10s → 30s 순서 재시도)
+  4. RISK_SCORE 이벤트 수신 시 대시보드 위험점수 자동 갱신 확인
+
+  테스트 결과:
+  - ALERT 이벤트 수신 시 토스트(5초 자동 소멸), 사운드, 브라우저
+    알림이 모두 정상 동작함을 확인
+  - 알림 벨 배지가 SSE ALERT 이벤트마다 즉시 증가함을 확인
+  - 네트워크 차단 후 1s, 2s, 5s, 10s, 30s 지연으로 재연결이
+    순서대로 시도됨을 콘솔 로그로 확인
+  - RISK_SCORE 이벤트 수신 후 해당 환자 대시보드 카드의 위험점수가
+    즉시 갱신됨을 확인
+
+──────────────────────────────────────────────────────────────────
+■ 테스트 3 — WebRTC WHEP 영상 스트리밍
+
+  테스트 절차:
+  1. /dashboard/:patientId 접속 → VideoPlayer 마운트 확인
+  2. mediamtx 서버 온라인 상태에서 영상 재생 여부 확인
+     (connecting 스피너 → live 영상 전환)
+  3. RTCPeerConnection SDP Offer/Answer 교환 확인
+     (DevTools Network 탭 → /whep POST 요청 200 응답)
+  4. mediamtx 서버 오프라인 시 에러 UI(WifiOff 아이콘) 표시 확인
+  5. 서버 복구 후 5초 이내 자동 재연결 확인
+  6. useWhepStatus 훅으로 Dashboard 카드의 카메라 온라인 도트
+     정확성 확인 (30s 주기 probe)
+
+  테스트 결과:
+  - 정상 연결 시 3초 이내 영상 재생 시작됨을 확인
+  - SDP Offer에 H264 코덱이 우선 배치되어 mediamtx와 정상 협상됨
+  - 서버 오프라인 시 WifiOff 아이콘과 '연결 끊김' 메시지 표시 확인
+  - 5초 후 자동 재연결 시도되며 서버 복구 시 영상 재개됨을 확인
+
+──────────────────────────────────────────────────────────────────
+■ 테스트 4 — TanStack Query 폴링 및 캐시
+
+  테스트 절차:
+  1. /dashboard 접속 후 15초 대기 → 환자 목록 자동 갱신 확인
+     (DevTools Network → /api/v1/events 주기적 요청 확인)
+  2. 백엔드에서 새 이벤트 추가 후 최대 15s 이내 화면 반영 확인
+  3. 여러 탭에서 동일 queryKey 공유 여부 확인
+     (refetchOnWindowFocus: false 설정으로 탭 전환 시 불필요 요청 없음)
+  4. 401 응답 발생 시 전역 에러 핸들러 동작 확인
+     (QueryCache.onError → toast + /login 이동)
+
+  테스트 결과:
+  - useAllEvents: 15s 간격 폴링이 정상 동작함을 확인
+  - usePatientList: 60s 간격 폴링 확인
+  - refetchOnWindowFocus: false로 탭 전환 시 불필요한 요청 없음 확인
+  - 401 응답 시 '로그인이 필요합니다' 토스트 후 /login으로
+    이동함을 확인
+
+──────────────────────────────────────────────────────────────────
+■ 테스트 5 — 알림 벨 배지 및 AlertPanel
+
+  테스트 절차:
+  1. SSE로 이벤트 수신 후 벨 배지 숫자 증가 확인
+  2. 알림 벨 클릭 → AlertPanel 슬라이드 열림 확인
+  3. 패널 열릴 때 markSeen() 호출 → seenAt 갱신 → 배지 리셋 확인
+  4. AlertPanel 내 필터 탭 (전체/오늘/위험) 동작 확인
+  5. 이벤트 항목 클릭 → /dashboard/:patientId 이동 확인
+  6. Escape 키 누르기 → 패널 닫힘 확인
+  7. 알림 페이지(/alerts) 방문 시에도 markSeen() 호출 확인
+
+  테스트 결과:
+  - 미확인 이벤트 수가 배지에 정확히 표시되고 패널 열기 시
+    즉시 0으로 리셋됨을 확인
+  - 필터 탭 전환 시 목록이 즉시 필터링됨을 확인
+  - Escape 키로 패널 닫힘, 항목 클릭으로 정상 이동 확인
+  - 브라우저 탭 타이틀이 '(N) 어르신 안전 돌봄 서비스' 형식으로
+    표시됨을 확인
+
+──────────────────────────────────────────────────────────────────
+■ 테스트 6 — 역할 기반 접근 제어 (RoleGuard)
+
+  테스트 절차:
+  1. guardian 계정으로 /admin 직접 접근 시 /dashboard로 리다이렉트 확인
+  2. admin 계정으로 /admin 접근 시 AdminDashboard 정상 표시 확인
+  3. guardian 계정에서 관리자 페이지 버튼 미노출 확인
+  4. /register-patient URL 직접 접근 시 RoleGuard 동작 확인
+     (admin → 정상 접근, guardian → /dashboard 이동)
+
+  테스트 결과:
+  - guardian이 /admin 접근 시 /dashboard로 즉시 리다이렉트 확인
+  - admin은 모든 페이지 정상 접근 확인
+  - 역할별 UI 차이 (관리자 페이지 버튼, 응급연락 버튼 등) 정상 표시
+
+──────────────────────────────────────────────────────────────────
+■ 테스트 7 — 환자 등록 3단계 위저드
+
+  테스트 절차:
+  1. /register-patient 접속 (admin 계정)
+  2. 1단계: 이름/생년월일/성별 입력 후 다음
+  3. 2단계: deviceKey/streamPath/비고 입력 후 다음
+  4. 3단계: 입력 확인 테이블에서 내용 검증 후 등록 제출
+  5. POST /api/v1/admin/patients/register → POST /api/v1/admin/devices/register
+     순서로 2개의 API 호출이 순차적으로 이루어지는지 Network 탭 확인
+  6. 등록 성공 토스트 후 /dashboard 이동 확인
+  7. 필수 필드 미입력 시 유효성 검사 에러 메시지 표시 확인
+
+  테스트 결과:
+  - 3단계 위저드가 각 단계 데이터를 정상적으로 유지하며 진행됨 확인
+  - 두 API 순차 호출(patients/register → devices/register) 정상 동작 확인
+  - 필수 필드 미입력 시 해당 필드에 에러 표시 확인
+  - 등록 완료 후 /dashboard로 정상 이동 확인
+
+──────────────────────────────────────────────────────────────────
+■ 테스트 8 — 이벤트 위험도 분류 및 색상 표시
+
+  테스트 절차:
+  1. AlertPanel에서 event_type별 테두리 색상 확인
+     (fall → red, abnormal → yellow, walking → green)
+  2. PatientDetail 이벤트 목록에서 배지 색상 확인
+  3. risk_score 값에 따른 게이지 바 너비 확인
+  4. 대시보드 카드의 위험 레벨 배지 색상 확인
+
+  테스트 결과:
+  - danger 이벤트(fall/drop/collision): red 색상 일관 표시 확인
+  - warning 이벤트(abnormal 등): yellow 색상 표시 확인
+  - safe 이벤트(walking/normal 등): green 색상 표시 확인
+  - risk_score 0~5 범위에 따른 게이지 바 너비가 비례하여 표시 확인
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3.6  결과 도출 (프론트엔드)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 구현 완료 기능 목록
+
+  [인증 및 권한]
+  - JWT 기반 로그인·로그아웃 (Zustand + localStorage 영속)
+  - AuthGuard: 비인증 접근 자동 차단
+  - RoleGuard: admin/guardian 역할 분리
+  - 401 자동 로그아웃 및 토스트 알림
+
+  [실시간 데이터 수신]
+  - fetch 기반 SSE 스트리밍 (EventSource 대신 사용)
+  - ALERT 이벤트: 소너 토스트 + Web Audio API 경보음 + Notification API
+  - RISK_SCORE 이벤트: 해당 환자 캐시 즉시 무효화
+  - 지수 백오프 재연결 (최대 30s 간격, 무한 재시도)
+
+  [실시간 영상 스트리밍]
+  - WebRTC WHEP 프로토콜로 mediamtx에 직접 연결
+  - H264 코덱 선호 설정 (mediamtx 호환)
+  - 연결 실패 시 5s 자동 재시도
+  - 영상 위 ActionOverlayPanel (행동 레이블 + 위험도)
+
+  [대시보드 및 환자 관리]
+  - 전체 환자 현황 카드 그리드 (위험점수 게이지, 카메라 상태)
+  - 환자별 상세: 영상 + 위험점수 SVG 게이지 + 이벤트 목록
+  - 분석 차트: 7일 바차트, 시간대별 활동 그리드, 히트맵 (Recharts)
+  - PDF 출력 기능 (window.print() + Print CSS)
+  - 이전/다음 환자 내비게이션
+
+  [알림 관리]
+  - 미확인 이벤트 배지 (24h 이내, seenAt 이후 기준)
+  - 슬라이드 AlertPanel (전체/오늘/위험 필터, Escape 닫기)
+  - 알림 이력 페이지 (날짜 그룹 / 테이블 뷰)
+  - 개별·전체 읽음 처리 (localStorage 영속)
+
+  [관리자 기능]
+  - AdminDashboard: 보호자 등록/삭제, 환자 위험점수 테이블
+  - 환자·기기 등록 3단계 위저드
+
+■ 정량적 결과
+
+  - 폴링 주기: 이벤트 목록 15s, 환자목록 60s, 대시보드 15s
+  - SSE 재연결 최대 지연: 30s
+  - WHEP 재연결 지연: 5s
+  - 알림 배지 정확도: 100% (24h + seenAt 기준)
+  - 지원 해상도: 1280px 이상 데스크탑 환경
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5.  수행 후기 및 개선 방향 (프론트엔드 담당, 김규보)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 수행 후기
+
+이번 졸업작품을 통해 실무 수준의 웹 프론트엔드 기술 스택을 처음부터
+끝까지 혼자 설계하고 구현하는 경험을 할 수 있었다. 단순히 화면을
+그리는 것을 넘어, 실시간 데이터 수신(SSE), WebRTC 영상 스트리밍,
+JWT 인증, 서버 상태 캐싱 등 복잡한 기술적 과제를 직접 해결해야 했다.
+
+가장 어려웠던 부분은 SSE 구현이었다. 처음에는 브라우저 내장
+EventSource API를 사용하려 했으나, EventSource는 Authorization
+헤더를 보낼 수 없다는 제약을 발견하고 fetch Streaming API로 직접
+SSE 파서를 구현해야 했다. ReadableStream을 청크 단위로 읽고 줄 단위로
+파싱하는 과정에서 버퍼링 처리와 AbortSignal 기반 클린업 로직을
+직접 작성하면서 웹 표준 스트리밍 API에 대한 깊은 이해를 얻었다.
+
+WebRTC WHEP 영상 스트리밍도 큰 도전이었다. SDP Offer/Answer 교환
+과정에서 mediamtx 서버와 코덱 협상이 실패하는 문제가 발생하였는데,
+H264 코덱을 SDP에서 최우선으로 재정렬하는 방법으로 해결하였다.
+ICE Gathering 완료를 기다리는 비동기 타이밍 처리도 직접 Promise로
+구현하면서 WebRTC 프로토콜의 동작 원리를 실전으로 익혔다.
+
+TanStack Query를 처음 사용해보았는데, 서버 상태 관리를 선언적으로
+처리하고 SSE 이벤트 발생 시 invalidateQueries만으로 화면이 즉시
+갱신되는 패턴이 매우 강력하다고 느꼈다. 이전에 useState와 useEffect로
+직접 폴링을 관리하던 방식보다 훨씬 코드가 간결해지고 캐시 동기화도
+자동으로 처리되어 생산성이 크게 향상되었다.
+
+팀 협업 측면에서는 백엔드(김진승)와 API 명세를 사전에 충분히 논의하지
+않아 초기에 응답 형식이 자주 바뀌는 혼선이 있었다. 향후에는 OpenAPI
+(Swagger) 명세를 먼저 확정하고 Mock 서버로 개발을 병렬 진행하는
+방식이 더 효율적임을 배웠다.
+
+■ 개선 방향
+
+  1. 모바일 반응형 대응
+     현재 1280px 이상 데스크탑 환경을 기준으로 설계되어 있어,
+     보호자가 스마트폰으로 확인하기 불편하다. Tailwind의 sm/md
+     브레이크포인트를 활용하여 모바일 레이아웃을 추가하면 실사용성이
+     크게 향상될 것이다.
+
+  2. WebRTC 영상 Overlay 서버 처리 방식 전환
+     현재 ActionOverlayPanel은 별도의 API 폴링(1.5s)으로 행동 레이블을
+     가져오는 방식이다. 향후 Raspberry Pi 5에서 스켈레톤 좌표를 Canvas에
+     직접 렌더링하는 방식으로 전환하면 영상과 행동 정보의 동기화
+     정확도가 높아지고 폴링 오버헤드도 제거할 수 있다.
+
+  3. PWA (Progressive Web App) 전환
+     Service Worker를 도입하면 오프라인 시에도 마지막 대시보드 상태를
+     캐싱하여 표시할 수 있고, Web Push 알림으로 앱 미실행 중에도
+     위험 이벤트 알림을 수신할 수 있다.
+
+  4. 단위 테스트 및 E2E 테스트 도입
+     현재 전혀 테스트 코드가 없는 상태이다. Vitest로 유틸리티 함수
+     (eventCategory, riskLevelFromScore, formatKST)의 단위 테스트를
+     먼저 작성하고, Playwright로 로그인 → 대시보드 → 알림 패널 확인
+     시나리오의 E2E 테스트를 구축하면 기능 회귀를 방지할 수 있다.
+
+  5. 위험점수 트렌드 그래프
+     현재 7일 이벤트 분포 바차트만 제공한다. 위험점수의 시계열 추이를
+     꺾은선 그래프로 시각화하면 보호자가 어르신의 건강 변화 추세를
+     더 직관적으로 파악할 수 있다.
+
+  6. 다국어 지원 (i18n)
+     react-i18next를 도입하여 한국어 외에 영어 UI를 지원하면
+     서비스 확장성이 향상된다.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8.  수행 사진 및 실행 화면 (프론트엔드)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [그림 A]  로그인 화면
+  설명: 좌측 브랜드 패널(방패+하트 로고, 서비스 소개)과 우측 로그인
+        폼으로 구성된 투 컬럼 레이아웃. 이메일·비밀번호 입력, 비밀번호
+        표시/숨김 토글, 로그인 오류 시 배너 에러 메시지 표시.
+
+  [그림 B]  메인 대시보드 화면
+  설명: 전체 환자 현황을 한눈에 볼 수 있는 대시보드. 상단에 총 환자수/
+        미확인 이벤트/위험 이벤트 통계 카드(숫자 카운트업 애니메이션),
+        하단에 환자별 카드 그리드(3열). 각 카드에 위험점수 게이지 바,
+        카메라 온라인 상태 도트, 최근 이벤트 시각 표시.
+
+  [그림 C]  환자 상세 페이지
+  설명: 좌측에 실시간 WHEP 영상(8열)과 ActionOverlayPanel(행동 레이블 +
+        위험도 오버레이), 우측에 SVG 반원 위험 게이지(4열). 하단에 최근
+        이벤트 목록(스크롤)과 7일 분석 차트 탭(바차트/시간대/히트맵).
+
+  [그림 D]  SSE 실시간 알림 수신 화면
+  설명: 위험 이벤트 발생 시 우측 상단에 소너 토스트 알림 표시, 헤더
+        알림 벨에 미확인 배지(숫자) 증가, 슬라이드 AlertPanel에 최신
+        이벤트 항목 추가. DANGER 이벤트 시 붉은 경보 스타일 적용.
+
+  [그림 E]  AlertPanel (알림 슬라이드 패널)
+  설명: 우측에서 슬라이드 인 되는 w-96 패널. 전체/오늘/위험 필터 탭,
+        이벤트 목록(위험도 색상 테두리), 클릭 시 환자 상세 이동.
+        패널 열기 시 미확인 배지가 즉시 리셋됨.
+
+  [그림 F]  알림 이력 페이지 (/alerts)
+  설명: URL 파라미터 기반 필터(환자/위험도), 날짜 그룹 이력 뷰와
+        shadcn 테이블 뷰 전환. 개별 읽음 토글, 전체 읽음 버튼,
+        미읽음 카운트 배지.
+
+  [그림 G]  관리자 대시보드 (/admin)
+  설명: slate-950 다크 테마. 통계 카드 4개, 환자 위험점수 정렬 테이블,
+        보호자 등록 폼(이메일/비밀번호/연결 환자), 보호자 목록 테이블
+        (삭제 confirm 모달). 우측에 7일 최근 이벤트 테이블.
+
+  [그림 H]  환자 등록 3단계 위저드
+  설명: 상단 프로그레스 바와 단계 인디케이터(①②③). 1단계 기본정보,
+        2단계 기기 정보, 3단계 확인 테이블 + 등록 버튼. 등록 완료 시
+        소너 토스트 알림 후 /dashboard 이동.
+
+  [그림 I]  VideoPlayer WHEP 연결 상태
+  설명: 연결 중(파란 스피너) → 라이브 영상 재생 → 연결 실패(WifiOff
+        아이콘 + 재연결 중 텍스트) 3가지 상태 UI. 영상 위에
+        ActionOverlayPanel이 오버레이로 표시됨.
+
+  [그림 J]  ActionOverlayPanel — 행동 레이블 오버레이
+  설명: 영상 우측 하단에 현재 행동 레이블(한국어)과 위험도 배지가
+        300ms fade 애니메이션으로 전환. DANGER 상태 시 붉은 pulse
+        애니메이션(animate-danger-pulse) 적용.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+9.  참고 문헌 (프론트엔드)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[1]  React 공식 문서, "React 18 — Concurrent Features",
+     https://react.dev
+
+[2]  TanStack Query 공식 문서, "TanStack Query v5",
+     https://tanstack.com/query/latest
+
+[3]  Zustand GitHub Repository, "Zustand — Bear necessities for
+     state management in React", pmndrs/zustand,
+     https://github.com/pmndrs/zustand
+
+[4]  React Router 공식 문서, "React Router v7",
+     https://reactrouter.com
+
+[5]  Vite 공식 문서, "Vite — Next Generation Frontend Tooling",
+     https://vitejs.dev
+
+[6]  Tailwind CSS 공식 문서, "Tailwind CSS v3",
+     https://tailwindcss.com
+
+[7]  shadcn/ui 공식 문서, "shadcn/ui — Beautifully designed
+     components", https://ui.shadcn.com
+
+[8]  MDN Web Docs, "Using server-sent events",
+     https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events
+
+[9]  MDN Web Docs, "Streams API — ReadableStream",
+     https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream
+
+[10] W3C WHEP Specification, "WebRTC-HTTP Egress Protocol (WHEP)",
+     https://www.ietf.org/archive/id/draft-murillo-whep-03.txt
+
+[11] MDN Web Docs, "RTCPeerConnection — WebRTC API",
+     https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection
+
+[12] mediamtx GitHub Repository, "mediamtx — A ready-to-use and
+     zero-dependency real-time media server",
+     https://github.com/bluenviron/mediamtx
+
+[13] Web Audio API 명세, "Web Audio API — W3C Recommendation",
+     https://www.w3.org/TR/webaudio/
+
+[14] Notifications API — MDN Web Docs,
+     https://developer.mozilla.org/en-US/docs/Web/API/Notifications_API
+
+[15] Recharts 공식 문서, "Recharts — A composable charting library",
+     https://recharts.org
+
+[16] react-hook-form 공식 문서, "react-hook-form v7",
+     https://react-hook-form.com
+
+[17] Zod 공식 문서, "Zod — TypeScript-first schema validation",
+     https://zod.dev
+
+[18] sonner 공식 문서, "sonner — An opinionated toast component",
+     https://sonner.emilkowal.ski
+
+[19] lucide-react 공식 문서, "Lucide — Beautiful & consistent icons",
+     https://lucide.dev
+
+[20] TypeScript 공식 문서, "TypeScript — JavaScript With Syntax
+     For Types", https://www.typescriptlang.org
+
+[21] Intl.DateTimeFormat — MDN Web Docs,
+     https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat
+
+[22] Intl.DateTimeFormat, "Asia/Seoul timezone handling in JavaScript",
+     IANA Time Zone Database, https://www.iana.org/time-zones
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+11.  최종 결과물 첨부
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 프론트엔드 소스코드 (GitHub)
+
+  저장소  : https://github.com/이글아이팀/frontend (비공개)
+  주요 디렉토리 구조:
+    src/
+      api/          # fetch 래퍼 (apiFetch), query key 상수
+      components/   # 재사용 UI 컴포넌트
+        layout/     # HomeLayout, AppLayout
+        streaming/  # ActionOverlayPanel, VideoPlayer
+        sse/        # SseProvider
+      pages/        # Login, Dashboard, PatientDetail, Alerts,
+                    # AdminDashboard, RegisterPatient, Profile
+      hooks/        # useActionPolling, useDashboard, useAllEvents 등
+      store/        # Zustand stores (auth, read, seen)
+      lib/          # apiFetch, event-labels, risk, format, query-client
+      router/       # 라우트 정의, AuthGuard, RoleGuard
+      types/        # TypeScript 인터페이스 (api.ts)
+
+■ 빌드 산출물
+
+  - npm run build 실행 결과 dist/ 디렉토리
+  - 번들 크기: ~450KB (gzip ~130KB)
+  - 지원 브라우저: Chrome 120+, Edge 120+ (Chromium 계열)
+
+■ 환경 설정 파일
+
+  .env.local:
+    VITE_API_BASE=https://homecare.p-e.kr
+    VITE_MEDIA_BASE=https://homecare.p-e.kr
+
+  주요 의존성 목록 (package.json):
+    react 19.x, react-dom 19.x
+    react-router-dom 7.x
+    @tanstack/react-query 5.x
+    zustand 5.x
+    react-hook-form 7.x
+    zod 4.x
+    tailwindcss 3.x
+    recharts 2.x
+    sonner 2.x
+    lucide-react 0.4x
+    date-fns 4.x
+    vite 8.x
+    typescript 5.x
+
+══════════════════════════════════════════════════════════════════
+  (끝)
+══════════════════════════════════════════════════════════════════

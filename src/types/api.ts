@@ -173,3 +173,39 @@ export interface ActionEvent {
 export interface ActionEventListResponse {
   items: ActionEvent[];
 }
+
+// 사건(incident) 단위 알림 소스 — GET /api/v1/incidents (JWT 인증)
+// 파라미터: patient_id / incident_type / status / limit
+export interface Incident {
+  incident_id: number;
+  patient_id: string;
+  incident_type: string;
+  started_at_utc: string;
+  ended_at_utc: string | null;
+  duration_sec: number | null;
+  raw_event_count: number | null;
+  status?: string | null;
+}
+
+export interface IncidentListResponse {
+  items: Incident[];
+}
+
+// UI 호환 형태 — 기존 이벤트 컴포넌트/분류(event-labels)를 그대로 재사용하기 위해
+// incident 필드에 id/event_type/ts_utc/severity 별칭을 추가한 형태.
+export interface IncidentEvent {
+  incident_id: number;
+  patient_id: string;
+  incident_type: string;
+  started_at_utc: string;
+  ended_at_utc: string | null;
+  duration_sec: number | null;
+  raw_event_count: number | null;
+  status: string | null;
+  // 별칭 (event-labels.EventLike 호환)
+  id: number;
+  event_type: string;
+  ts_utc: string;
+  severity: number;
+  risk_score?: number | null;
+}

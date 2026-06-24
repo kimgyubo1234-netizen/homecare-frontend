@@ -1,4 +1,4 @@
-import type { ActionEvent, RiskLevel } from '@/types/api';
+import type { RiskLevel } from '@/types/api';
 
 // 위험점수(5점 만점) → 등급. 1~2 안전 / 3~4 주의 / 5 위험
 export function riskLevelFromScore(score: number): RiskLevel {
@@ -9,7 +9,7 @@ export function riskLevelFromScore(score: number): RiskLevel {
 
 // 최근 액션 이벤트들의 risk_score 평균 → 0~5 위험점수 (데이터 없으면 null)
 //   1순위: 최근 5분 이내 / 없으면 최근 10건
-export function avgRiskScore(events: ActionEvent[]): number | null {
+export function avgRiskScore(events: { ts_utc: string; risk_score?: number | null }[]): number | null {
   if (!events || events.length === 0) return null;
   const now = Date.now();
   const windowMs = 5 * 60 * 1000;

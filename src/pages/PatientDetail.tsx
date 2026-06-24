@@ -29,7 +29,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import type { RiskLevel, RiskScore, ActionEvent } from '@/types/api';
+import type { RiskLevel, RiskScore, IncidentEvent } from '@/types/api';
 import { usePatientEvents } from '@/hooks/usePatientEvents';
 import { eventLevelCategory } from '@/lib/event-labels';
 import type { SeverityCategory } from '@/lib/event-labels';
@@ -39,7 +39,7 @@ import { avgRiskScore, riskLevelFromScore } from '@/lib/risk';
 interface AnalysisItem { ts_utc: string; type: string; cat: SeverityCategory; }
 
 // 위험점수 분석 데이터가 없을 때, 최근 액션 이벤트 risk_score 평균으로 추정 (공통 기준 사용)
-function riskFromRecentEvents(events: ActionEvent[], patientId: string): RiskScore | null {
+function riskFromRecentEvents(events: IncidentEvent[], patientId: string): RiskScore | null {
   const score = avgRiskScore(events);
   if (score === null || events.length === 0) return null;
   const latestTs = [...events]
@@ -56,7 +56,7 @@ function riskFromRecentEvents(events: ActionEvent[], patientId: string): RiskSco
   };
 }
 
-function eventToAnalysis(e: ActionEvent): AnalysisItem {
+function eventToAnalysis(e: IncidentEvent): AnalysisItem {
   // 유형 기준 분류: 낙상=위험 / 비정상=주의 / 정상=안전
   return { ts_utc: e.ts_utc, type: e.event_type, cat: eventLevelCategory(e) };
 }
