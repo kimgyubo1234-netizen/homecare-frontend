@@ -306,8 +306,16 @@ function ChartTooltip({ active, payload, label }: {
 
 
 function RiskSegmentBar({ score }: { score: number }) {
-  const pct = Math.min(Math.max((score / 5) * 100, 0), 100);
-  const markerColor = score <= 2 ? '#22c55e' : score <= 4 ? '#f97316' : '#ef4444';
+  // 구간 폭(%)을 등급 경계(안전<3 / 주의 3~5 / 위험 5)에 맞춰 마커를 배치 →
+  // 마커가 항상 자기 등급 색 구간 안에 위치하도록 보장한다.
+  const SAFE_W = 40, WARN_W = 40; // 위험 구간 20%
+  const level = riskLevelFromScore(score);
+  let pct: number;
+  if (score < 3)       pct = (Math.max(0, score) / 3) * SAFE_W;             // 안전 구간 내
+  else if (score < 5)  pct = SAFE_W + ((score - 3) / 2) * WARN_W;          // 주의 구간 내
+  else                 pct = 100;                                           // 위험
+  pct = Math.min(Math.max(pct, 0), 100);
+  const markerColor = level === 'high' ? '#ef4444' : level === 'medium' ? '#f97316' : '#22c55e';
   return (
     <div className="mt-3 space-y-1.5">
       <div className="relative h-3">
