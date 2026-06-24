@@ -106,8 +106,9 @@ function RiskGaugeBar({ score }: { score: number }) {
     return () => clearTimeout(id);
   }, []);
 
-  const barColor   = score <= 2 ? 'bg-emerald-400' : score <= 4 ? 'bg-amber-400' : 'bg-red-500';
-  const scoreColor = score <= 2 ? 'text-emerald-600' : score <= 4 ? 'text-amber-600' : 'text-red-600';
+  const level      = riskLevelFromScore(score);
+  const barColor   = level === 'high' ? 'bg-red-500' : level === 'medium' ? 'bg-amber-400' : 'bg-emerald-400';
+  const scoreColor = level === 'high' ? 'text-red-600' : level === 'medium' ? 'text-amber-600' : 'text-emerald-600';
 
   return (
     <div className="mt-3">
