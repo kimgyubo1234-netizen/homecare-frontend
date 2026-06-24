@@ -4,7 +4,7 @@ import { usePatientList } from '@/hooks/usePatientList';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useAllEvents } from '@/hooks/useAllEvents';
 import { translateEventType, eventSeverityDot, eventSeverityBadge, eventLevelCategory } from '@/lib/event-labels';
-import { avgRiskScore, riskLevelFromScore } from '@/lib/risk';
+import { riskScoreFromEvents, riskLevelFromScore } from '@/lib/risk';
 import { formatKST } from '@/lib/format';
 import {
   Users, ChevronRight, Clock,
@@ -277,7 +277,7 @@ export default function Dashboard() {
       const alertHighestLevel = levels.find(l => pa.some(a => a.level === l)) ?? null;
 
       // 카드 등급/점수 = 통일 기준(위험점수). 백엔드 분석값 우선, 없으면 최근 이벤트 평균.
-      const unifiedScore = p.latest_risk_score?.score ?? avgRiskScore(pe);
+      const unifiedScore = p.latest_risk_score?.score ?? riskScoreFromEvents(pe);
       const scoreLevel: AlertLevel | null = unifiedScore != null ? riskLevelFromScore(unifiedScore) : null;
       // 점수가 전혀 없을 때만 미읽음 알림 등급으로 폴백
       const highestLevel: AlertLevel | null = scoreLevel ?? alertHighestLevel;

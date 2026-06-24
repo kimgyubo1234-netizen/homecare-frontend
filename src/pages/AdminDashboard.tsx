@@ -8,7 +8,7 @@ import { useAlerts } from '@/hooks/useAlerts';
 import { useAllEvents } from '@/hooks/useAllEvents';
 import { eventLevelCategory } from '@/lib/event-labels';
 import type { EventLike } from '@/lib/event-labels';
-import { avgRiskScore, riskLevelFromScore } from '@/lib/risk';
+import { riskScoreFromEvents, riskLevelFromScore } from '@/lib/risk';
 import { formatKST } from '@/lib/format';
 import { useMutation } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
@@ -173,7 +173,7 @@ export default function AdminDashboard() {
     const map: Record<string, { score: number | null; level: RiskLevel | null; ts: string | null }> = {};
     for (const p of (patientData ?? [])) {
       const pe = (allEvents ?? []).filter(e => e.patient_id === p.patient_id);
-      const score = p.latest_risk_score?.score ?? avgRiskScore(pe);
+      const score = p.latest_risk_score?.score ?? riskScoreFromEvents(pe);
       const ts = p.latest_risk_score?.created_at_utc
         ?? (pe.length ? [...pe].sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())[0].ts_utc : null);
       map[p.patient_id] = { score, level: score != null ? riskLevelFromScore(score) : null, ts };

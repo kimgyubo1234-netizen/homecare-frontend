@@ -33,14 +33,14 @@ import type { RiskLevel, RiskScore, IncidentEvent } from '@/types/api';
 import { usePatientEvents } from '@/hooks/usePatientEvents';
 import { eventLevelCategory } from '@/lib/event-labels';
 import type { SeverityCategory } from '@/lib/event-labels';
-import { avgRiskScore, riskLevelFromScore } from '@/lib/risk';
+import { riskScoreFromEvents, riskLevelFromScore } from '@/lib/risk';
 
 // 알림 분석 차트용 정규화 타입 — 위험점수 기준 3단계(안전/주의/위험)
 interface AnalysisItem { ts_utc: string; type: string; cat: SeverityCategory; }
 
 // 위험점수 분석 데이터가 없을 때, 최근 액션 이벤트 risk_score 평균으로 추정 (공통 기준 사용)
 function riskFromRecentEvents(events: IncidentEvent[], patientId: string): RiskScore | null {
-  const score = avgRiskScore(events);
+  const score = riskScoreFromEvents(events);
   if (score === null || events.length === 0) return null;
   const latestTs = [...events]
     .sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())[0].ts_utc;
