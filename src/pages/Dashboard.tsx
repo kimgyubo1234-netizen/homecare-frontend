@@ -7,7 +7,7 @@ import { translateEventType, eventSeverityDot, eventSeverityBadge, eventLevelCat
 import { riskScoreFromEvents, riskLevelFromScore } from '@/lib/risk';
 import { formatKST } from '@/lib/format';
 import {
-  Users, ChevronRight, Clock,
+  Users, ChevronRight,
   CheckCircle2, AlertCircle, XCircle, ShieldCheck,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -224,16 +224,11 @@ function PatientCard({ p, tick, index }: { p: PatientStat; tick: number; index: 
 
         {p.riskScore !== null && <RiskGaugeBar score={p.riskScore} />}
 
-        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 text-xs text-slate-400">
-          {lastSeenTs ? (
-            <>
-              <Clock className="size-3" />
-              <span>{relativeTime(lastSeenTs, tick)}</span>
-            </>
-          ) : cameraOnline ? (
+        {!lastSeenTs && cameraOnline && (
+          <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 text-xs text-slate-400">
             <span className="text-emerald-500 font-medium">이상 없음</span>
-          ) : null}
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="px-6 pb-5">
