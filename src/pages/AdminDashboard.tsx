@@ -2,9 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Bell, AlertTriangle, ShieldCheck, LogOut, ChevronRight, UserPlus, UserCheck, Trash2, Loader2, X, Search, Mail, CalendarDays, Hash } from 'lucide-react';
 import { useAuthStore } from '@/lib/auth-store';
-import { useReadStore } from '@/lib/read-store';
+import { useSeenStore } from '@/lib/seen-store';
 import { usePatientList } from '@/hooks/usePatientList';
-import { useAlerts } from '@/hooks/useAlerts';
 import { useAllEvents } from '@/hooks/useAllEvents';
 import { eventLevelCategory } from '@/lib/event-labels';
 import type { EventLike } from '@/lib/event-labels';
@@ -67,9 +66,8 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const { user, clearAuth } = useAuthStore();
   const { data: patientData, isLoading: pLoading } = usePatientList();
-  const { data: alerts, isLoading: aLoading } = useAlerts({ days: 7 });
   const { data: allEvents, isLoading: eLoading } = useAllEvents(200);
-  const readIds = useReadStore((s) => s.readIds);
+  const seenAt = useSeenStore((s) => s.seenAt);
 
   // 최근 7일 감지 이벤트 (최신순, 최대 20건)
   const recentEvents = useMemo(() => {
@@ -212,11 +210,17 @@ export default function AdminDashboard() {
 
   const totalPatients  = patients.length;
   const dangerPatients = patients.filter(p => patientRisk[p.patient_id]?.level === 'high').length;
-  const unreadAlerts   = alerts?.filter(a => !a.is_read && !readIds.includes(a.id)).length ?? 0;
-  // 위험 알림 = 최근 7일 위험(낙상 등) 감지 이벤트 수 — 최근 감지 목록·차트의 위험과 일치
+  // 위험 알림 = 최근 7일 위험(낙상 등) 감지 사건 수 — 최근 감지 목록·차트의 위험과 일치
   const criticalAlerts = allEvents?.filter(e =>
     Date.now() - new Date(e.ts_utc).getTime() < 7 * 24 * 60 * 60 * 1000 &&
     eventLevelCategory(e) === 'danger'
+  ).length ?? 0;
+  // 미확인 알림 = 위험 사건 중 아직 확인하지 않은 것 (벨/알림 페이지 확인 시 줄어듦)
+  const seenMs = seenAt ? new Date(seenAt).getTime() : 0;
+  const unreadAlerts = allEvents?.filter(e =>
+    Date.now() - new Date(e.ts_utc).getTime() < 7 * 24 * 60 * 60 * 1000 &&
+    eventLevelCategory(e) === 'danger' &&
+    new Date(e.ts_utc).getTime() > seenMs
   ).length ?? 0;
 
   function handleLogout() {
@@ -267,13 +271,13 @@ export default function AdminDashboard() {
           />
           <StatCard
             label="미확인 알림"
-            value={aLoading ? '-' : unreadAlerts}
+            value={eLoading ? '-' : unreadAlerts}
             icon={<Bell className="size-5 text-amber-400" />}
             color={unreadAlerts > 0 ? 'border-amber-500/40 bg-amber-500/10' : 'border-amber-500/20 bg-amber-500/5'}
           />
           <StatCard
             label="위험 알림 (7일)"
-            value={aLoading ? '-' : criticalAlerts}
+            value={eLoading ? '-' : criticalAlerts}
             icon={<AlertTriangle className="size-5 text-orange-400" />}
             color="border-orange-500/20 bg-orange-500/5"
           />

@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { AlertLevel } from '@/types/api';
 import { useAuthUser } from '@/lib/auth-store';
 import { useReadStore } from '@/lib/read-store';
+import { useSeenStore } from '@/lib/seen-store';
 import { useWhepStatus } from '@/hooks/useWhepStatus';
 
 // ── constants ──────────────────────────────────────────────────────────────
@@ -257,6 +258,7 @@ export default function Dashboard() {
   const { data: allAlerts, isLoading: isAlertsLoading } = useAlerts();
   const { data: allEvents, isLoading: isEventsLoading } = useAllEvents(200);
   const readIds = useReadStore((s) => s.readIds);
+  const seenAt = useSeenStore((s) => s.seenAt);
 
   const patientMap = useMemo(() => {
     if (!patients) return {} as Record<string, string>;
@@ -315,11 +317,17 @@ export default function Dashboard() {
   }, [allEvents, activityFilter]);
 
   const totalPatients  = patients?.length ?? 0;
-  const unreadAlerts   = allAlerts?.filter(a => !a.is_read && !readIds.includes(a.id)).length ?? 0;
-  // 위험 알림 = 최근 7일 위험(낙상 등) 감지 이벤트 수 — 최근 감지 목록·차트의 위험과 일치
+  // 위험 알림 = 최근 7일 위험(낙상 등) 감지 사건 수 — 최근 감지 목록·차트의 위험과 일치
   const criticalAlerts = allEvents?.filter(e =>
     Date.now() - new Date(e.ts_utc).getTime() < 7 * 24 * 60 * 60 * 1000 &&
     eventLevelCategory(e) === 'danger'
+  ).length ?? 0;
+  // 미읽음 알림 = 위험 사건 중 아직 확인하지 않은 것 (벨/알림 페이지 확인 시 줄어듦)
+  const seenMs = seenAt ? new Date(seenAt).getTime() : 0;
+  const unreadAlerts   = allEvents?.filter(e =>
+    Date.now() - new Date(e.ts_utc).getTime() < 7 * 24 * 60 * 60 * 1000 &&
+    eventLevelCategory(e) === 'danger' &&
+    new Date(e.ts_utc).getTime() > seenMs
   ).length ?? 0;
   const isLoading      = isPatientsLoading || isAlertsLoading;
 
