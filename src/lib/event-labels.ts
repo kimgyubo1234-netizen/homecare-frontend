@@ -5,6 +5,7 @@ export const EVENT_TYPE_KO: Record<string, string> = {
   abnormal_posture: '비정상 자세',
   abnormal_motion: '비정상 움직임',
   normal_activity: '정상 활동',
+  normal_activity_summary: '정상 활동',
   no_activity: '활동 없음',
   inactive: '비활동 감지',
   motion_detected: '움직임 감지',
