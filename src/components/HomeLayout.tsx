@@ -4,7 +4,6 @@ import { Bell, LogOut, LayoutDashboard } from 'lucide-react';
 import { useAuthStore, useAuthUser } from '@/lib/auth-store';
 import { useAllEvents } from '@/hooks/useAllEvents';
 import { useSeenStore } from '@/lib/seen-store';
-import SseProvider from '@/components/SseProvider';
 import OnboardingTour from '@/components/OnboardingTour';
 import AlertPanel from '@/components/AlertPanel';
 
@@ -46,7 +45,6 @@ export default function HomeLayout() {
 
   return (
     <div className="min-h-screen bg-white">
-      <SseProvider />
       <OnboardingTour />
       <AlertPanel open={panelOpen} onClose={() => setPanelOpen(false)} />
 

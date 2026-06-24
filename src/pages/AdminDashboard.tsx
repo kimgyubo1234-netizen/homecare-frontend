@@ -14,7 +14,6 @@ import { useMutation } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { toast } from 'sonner';
 import type { GuardianListResponse, GuardianListItem, AdminRegisterGuardianRequest, RiskLevel } from '@/types/api';
-import SseProvider from '@/components/SseProvider';
 
 const ALERT_TYPE_KO: Record<string, string> = {
   fall: '낙상',
@@ -226,7 +225,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <SseProvider />
       {/* 헤더 */}
       <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur px-6 py-4">
         <div className="mx-auto flex max-w-6xl items-center justify-between">

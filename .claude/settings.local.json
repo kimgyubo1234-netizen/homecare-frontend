@@ -71,7 +71,9 @@
       "PowerShell(git commit -m 'fix: �˸� �� ������ ��Ȯ�� �̺�Ʈ �������� ����, �г�/�˸������� �湮 �� Ȯ�� ó��')",
       "PowerShell(git push)",
       "Read(//c/Users/Public/Documents/졸작 프로젝트/프론트엔드 파일/docs/**)",
-      "PowerShell(git commit -m 'feat: �˸�/�̷� �ҽ��� raw �̺�Ʈ\\(/events\\)���� ��� ����\\(/api/v1/incidents\\)�� ��ü')"
+      "PowerShell(git commit -m 'feat: �˸�/�̷� �ҽ��� raw �̺�Ʈ\\(/events\\)���� ��� ����\\(/api/v1/incidents\\)�� ��ü')",
+      "Bash(git rm *)",
+      "PowerShell(git commit -m 'refactor: SSE\\(/alerts/stream\\) ���� - ������ ������ �������� �Ͽ�ȭ')"
     ]
   }
 }

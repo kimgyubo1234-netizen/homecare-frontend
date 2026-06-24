@@ -7,7 +7,6 @@ import { useReadStore } from '@/lib/read-store';
 import { useServerStatus } from '@/hooks/useServerStatus';
 import { useAlerts } from '@/hooks/useAlerts';
 import { usePatientList } from '@/hooks/usePatientList';
-import SseProvider from '@/components/SseProvider';
 import OnboardingTour from '@/components/OnboardingTour';
 import type { AlertLevel } from '@/types/api';
 
@@ -155,7 +154,6 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen flex bg-slate-50">
-      <SseProvider />
       <OnboardingTour />
 
       {/* 사이드바 */}
