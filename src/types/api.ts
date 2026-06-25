@@ -191,6 +191,25 @@ export interface IncidentListResponse {
   items: Incident[];
 }
 
+// 위험 영상 클립 — GET /api/v1/clips (JWT 인증, presigned video_url 만료 주의)
+export interface Clip {
+  id: number;
+  clip_id: string;
+  patient_id: string;
+  event_type: string;
+  occurred_at_utc: string;
+  uploaded_at_utc: string;
+  actual_duration_sec: number | null;
+  file_size_bytes: number | null;
+  related_alert_id: number | null;
+  video_url: string;
+  url_expires_in: number;
+}
+
+export interface ClipListResponse {
+  items: Clip[];
+}
+
 // UI 호환 형태 — 기존 이벤트 컴포넌트/분류(event-labels)를 그대로 재사용하기 위해
 // incident 필드에 id/event_type/ts_utc/severity 별칭을 추가한 형태.
 export interface IncidentEvent {

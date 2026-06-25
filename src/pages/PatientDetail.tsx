@@ -31,6 +31,7 @@ import {
 } from 'recharts';
 import type { RiskLevel, RiskScore, IncidentEvent } from '@/types/api';
 import { usePatientEvents } from '@/hooks/usePatientEvents';
+import ClipsCard from '@/components/ClipsCard';
 import { eventLevelCategory } from '@/lib/event-labels';
 import type { SeverityCategory } from '@/lib/event-labels';
 import { riskScoreFromEvents, riskLevelFromScore } from '@/lib/risk';
@@ -951,6 +952,9 @@ export default function PatientDetail() {
                 )}
               </CardContent>
             </Card>
+
+            {/* 위험 영상 클립 */}
+            <ClipsCard patientId={patientId} />
 
           </div>
         </div>
