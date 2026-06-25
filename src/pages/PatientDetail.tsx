@@ -14,7 +14,7 @@ import { useActionPolling } from '@/hooks/useActionPolling';
 import {
   ArrowLeft, User, Users, Calendar, Heart,
   Activity, AlertTriangle, UserX, Zap, Eye, Clock,
-  ChevronLeft, ChevronRight, Bell, Phone, Printer,
+  ChevronLeft, ChevronRight, Bell, Phone, Printer, Play,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -29,9 +29,11 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import type { RiskLevel, RiskScore, IncidentEvent } from '@/types/api';
+import type { RiskLevel, RiskScore, IncidentEvent, Clip } from '@/types/api';
 import { usePatientEvents } from '@/hooks/usePatientEvents';
+import { useClips } from '@/hooks/useClips';
 import ClipsCard from '@/components/ClipsCard';
+import ClipPlayerModal from '@/components/ClipPlayerModal';
 import { eventLevelCategory } from '@/lib/event-labels';
 import type { SeverityCategory } from '@/lib/event-labels';
 import { riskScoreFromEvents, riskLevelFromScore } from '@/lib/risk';
@@ -55,6 +57,21 @@ function riskFromRecentEvents(events: IncidentEvent[], patientId: string): RiskS
     analyzed_to_utc: null,
     created_at_utc: latestTs,
   };
+}
+
+// 사건(이벤트)에 대응하는 영상 클립 찾기 — 같은 어르신·유형 + 발생시각 근접(10분 이내)
+function findClipForEvent(ev: IncidentEvent, clips: Clip[] | undefined): Clip | null {
+  if (!clips || clips.length === 0) return null;
+  const evMs = new Date(ev.ts_utc).getTime();
+  const WINDOW = 10 * 60 * 1000;
+  let best: Clip | null = null;
+  let bestDiff = Infinity;
+  for (const c of clips) {
+    if (c.patient_id !== ev.patient_id || c.event_type !== ev.event_type) continue;
+    const diff = Math.abs(new Date(c.occurred_at_utc).getTime() - evMs);
+    if (diff <= WINDOW && diff < bestDiff) { best = c; bestDiff = diff; }
+  }
+  return best;
 }
 
 function eventToAnalysis(e: IncidentEvent): AnalysisItem {
@@ -388,6 +405,13 @@ export default function PatientDetail() {
     () => [...(patientEvents ?? [])].sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime()),
     [patientEvents],
   );
+
+  // 영상 클립 — 최근 이벤트 매칭 + 공유 플레이어
+  const { data: clips, refetch: refetchClips } = useClips({ patientId });
+  const [playerClipId, setPlayerClipId] = useState<number | null>(null);
+  const playerClip = clips?.find(c => c.id === playerClipId) ?? null;
+  // 재생 직전 목록을 새로 받아 만료되지 않은 presigned URL 사용
+  const openClip = (id: number) => { refetchClips(); setPlayerClipId(id); };
 
   // 이전 / 다음 어르신
   const currentIndex = patients?.findIndex(p => p.patient_id === patientId) ?? -1;
@@ -765,6 +789,7 @@ export default function PatientDetail() {
                         const severityColor =
                           sevCat === 'danger' ? 'bg-red-500' :
                           sevCat === 'warning' ? 'bg-yellow-400' : 'bg-green-400';
+                        const clip = findClipForEvent(event, clips);
                         return (
                           <li
                             key={event.id}
@@ -774,6 +799,16 @@ export default function PatientDetail() {
                             <span className={`size-1.5 rounded-full shrink-0 ${severityColor}`} />
                             <EventIcon className="size-3.5 shrink-0 text-slate-400" />
                             <span className="flex-1 truncate text-xs font-medium text-slate-700">{translateEventType(event.event_type)}</span>
+                            {clip && (
+                              <button
+                                type="button"
+                                onClick={() => openClip(clip.id)}
+                                className="shrink-0 inline-flex items-center gap-1 rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 transition-colors hover:bg-blue-100"
+                              >
+                                <Play className="size-3" />
+                                영상
+                              </button>
+                            )}
                             <span className="shrink-0 text-[10px] text-slate-400 whitespace-nowrap">{formatKST(event.ts_utc)}</span>
                           </li>
                         );
@@ -953,8 +988,8 @@ export default function PatientDetail() {
               </CardContent>
             </Card>
 
-            {/* 위험 영상 클립 */}
-            <ClipsCard patientId={patientId} />
+            {/* 영상 클립 */}
+            <ClipsCard patientId={patientId} onSelect={openClip} />
 
           </div>
         </div>
@@ -1086,6 +1121,9 @@ export default function PatientDetail() {
           </section>
         )}
       </div>
+
+      {/* 공유 영상 클립 플레이어 (클립 목록 + 최근 이벤트 영상 버튼 공용) */}
+      <ClipPlayerModal clip={playerClip} onClose={() => setPlayerClipId(null)} />
     </div>
   );
 }

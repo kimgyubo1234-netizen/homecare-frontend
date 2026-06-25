@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { Video, Play, X, Film } from 'lucide-react';
+import { Video, Play, Film } from 'lucide-react';
 import { useClips } from '@/hooks/useClips';
 import { formatKST } from '@/lib/format';
 import { translateEventType, eventSeverityBadge } from '@/lib/event-labels';
@@ -24,29 +23,9 @@ function fmtDuration(sec: number | null): string {
   return `${sec.toFixed(1)}초`;
 }
 
-export default function ClipsCard({ patientId }: { patientId: string }) {
+// 영상 클립 목록 카드. 재생은 상위(PatientDetail)가 공유 플레이어로 처리하므로 onSelect로 위임.
+export default function ClipsCard({ patientId, onSelect }: { patientId: string; onSelect: (id: number) => void }) {
   const { data: clips, isLoading, error, refetch } = useClips({ patientId, limit: 50 });
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-
-  // 만료 URL 방지 — 재생 직전 목록을 새로 받아 신선한 presigned URL 사용
-  const openClip = async (id: number) => {
-    setSelectedId(id);
-    refetch();
-  };
-
-  const selected = clips?.find(c => c.id === selectedId) ?? null;
-
-  // 모달 열려 있을 때 Esc로 닫기 + 배경 스크롤 잠금
-  useEffect(() => {
-    if (selectedId === null) return;
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedId(null); };
-    window.addEventListener('keydown', h);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      window.removeEventListener('keydown', h);
-      document.body.style.overflow = '';
-    };
-  }, [selectedId]);
 
   return (
     <Card className="col-span-12">
@@ -54,7 +33,7 @@ export default function ClipsCard({ patientId }: { patientId: string }) {
         <div className="flex items-center gap-3">
           <CardTitle className="flex items-center gap-2">
             <Video className="size-4 text-blue-600" />
-            위험 영상 클립
+            영상 클립
           </CardTitle>
           {!isLoading && clips && clips.length > 0 && (
             <span className="text-xs text-slate-400">{clips.length}건</span>
@@ -85,7 +64,7 @@ export default function ClipsCard({ patientId }: { patientId: string }) {
                 <li key={c.id}>
                   <button
                     type="button"
-                    onClick={() => openClip(c.id)}
+                    onClick={() => onSelect(c.id)}
                     className="group flex w-full items-center gap-3 rounded-xl border border-slate-100 bg-white px-4 py-3 text-left transition-all hover:border-blue-200 hover:shadow-sm"
                   >
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400 transition-colors group-hover:bg-blue-50 group-hover:text-blue-600">
@@ -106,44 +85,6 @@ export default function ClipsCard({ patientId }: { patientId: string }) {
           </ul>
         )}
       </CardContent>
-
-      {/* 재생 모달 */}
-      {selected && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 animate-in fade-in duration-150"
-          onClick={() => setSelectedId(null)}
-        >
-          <div
-            className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <Video className="size-4 shrink-0 text-blue-600" />
-                <span className="truncate text-sm font-semibold text-slate-800">
-                  {translateEventType(selected.event_type)}
-                </span>
-                <span className="shrink-0 text-xs text-slate-400">{formatKST(selected.occurred_at_utc)}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedId(null)}
-                className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-            <video
-              key={selected.video_url}
-              src={selected.video_url}
-              controls
-              autoPlay
-              playsInline
-              className="max-h-[70vh] w-full bg-black"
-            />
-          </div>
-        </div>
-      )}
     </Card>
   );
 }
