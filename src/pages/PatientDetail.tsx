@@ -420,23 +420,8 @@ export default function PatientDetail() {
     ? patients![currentIndex + 1]
     : null;
 
-  // 최신 위험점수 — ①대시보드 ②환자 목록 ③실시간 액션 이벤트(추정) 순으로 폴백
-  const listItem = patients?.find(p => p.patient_id === patientId);
-  const latestRisk: RiskScore | null =
-    dashboard?.latest_risk
-    ?? (listItem?.latest_risk_score
-      ? {
-          id: listItem.latest_risk_score.id,
-          patient_id: patientId,
-          score: listItem.latest_risk_score.score,
-          risk_level: listItem.latest_risk_score.risk_level,
-          reason: '',
-          analyzed_from_utc: null,
-          analyzed_to_utc: null,
-          created_at_utc: listItem.latest_risk_score.created_at_utc,
-        }
-      : null)
-    ?? riskFromRecentEvents(patientEvents ?? [], patientId);
+  // 최신 위험점수 — 사건(incidents) 기준으로 계산 (2차 AI latest_risk/latest_risk_score 미사용)
+  const latestRisk: RiskScore | null = riskFromRecentEvents(patientEvents ?? [], patientId);
 
   // 히어로 변수
   const riskLevel     = latestRisk?.risk_level;

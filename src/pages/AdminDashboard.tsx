@@ -166,14 +166,13 @@ export default function AdminDashboard() {
     document.title = '관리자 대시보드 — 어르신 안전 돌봄 서비스';
   }, []);
 
-  // 통일 위험점수 — 백엔드 분석값 우선, 없으면 최근 이벤트 risk_score 평균
+  // 통일 위험점수 — 사건(incidents) 기준으로 계산 (2차 AI latest_risk_score 미사용)
   const patientRisk = useMemo(() => {
     const map: Record<string, { score: number | null; level: RiskLevel | null; ts: string | null }> = {};
     for (const p of (patientData ?? [])) {
       const pe = (allEvents ?? []).filter(e => e.patient_id === p.patient_id);
-      const score = p.latest_risk_score?.score ?? riskScoreFromEvents(pe);
-      const ts = p.latest_risk_score?.created_at_utc
-        ?? (pe.length ? [...pe].sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())[0].ts_utc : null);
+      const score = riskScoreFromEvents(pe);
+      const ts = pe.length ? [...pe].sort((a, b) => new Date(b.ts_utc).getTime() - new Date(a.ts_utc).getTime())[0].ts_utc : null;
       map[p.patient_id] = { score, level: score != null ? riskLevelFromScore(score) : null, ts };
     }
     return map;

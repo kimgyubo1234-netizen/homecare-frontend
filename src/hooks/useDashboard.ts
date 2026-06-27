@@ -10,9 +10,8 @@ export function useDashboard(patientId: string) {
         `/api/v1/dashboard?patient_id=${encodeURIComponent(patientId)}`
       ),
     enabled: !!patientId,
-    staleTime: 10 * 1000,
-    refetchInterval: 15 * 1000,
-    refetchIntervalInBackground: true,
+    // 환자 기본정보(이름·성별·나이·상태) 위주라 거의 고정 → 폴링 없이 진입 시 1회 + 포커스 시 갱신
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: true,
   });
 }
