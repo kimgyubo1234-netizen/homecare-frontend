@@ -1,53 +1,51 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ActionEvent } from '@/types/api';
-import { RISK_COLOR, getActivityLabel } from './labels';
+import type { IncidentEvent } from '@/types/api';
+import { RISK_COLOR } from './labels';
 import type { RiskLabelKey } from './labels';
+import { eventLevelCategory, translateEventType } from '@/lib/event-labels';
+import type { SeverityCategory } from '@/lib/event-labels';
 
 interface Props {
-  event: ActionEvent | null;
+  event: IncidentEvent | null;
   isConnected: boolean;
   isDelayed: boolean;
 }
 
-
-function toRiskKey(label: string | undefined): RiskLabelKey {
-  if (!label) return 'NORMAL';
-  const upper = label.toUpperCase();
-  if (upper === 'DANGER') return 'DANGER';
-  if (upper === 'SUSPICIOUS' || upper === 'ABNORMAL') return 'ABNORMAL';
-  return 'NORMAL';
-}
+// 사건 위험도 카테고리 → 오버레이 색상/위험도 점수 매핑
+const CAT_TO_RISK: Record<SeverityCategory, RiskLabelKey> = {
+  danger: 'DANGER',
+  warning: 'ABNORMAL',
+  safe: 'NORMAL',
+};
+const CAT_TO_SCORE: Record<SeverityCategory, number> = { danger: 5, warning: 3, safe: 1 };
 
 export default function ActionOverlayPanel({ event, isConnected, isDelayed }: Props) {
-  const riskKey = toRiskKey(event?.risk_label);
+  const cat: SeverityCategory = event ? eventLevelCategory(event) : 'safe';
+  const riskKey = CAT_TO_RISK[cat];
   const colors = RISK_COLOR[riskKey];
 
-  // activity 변경 시 fade 애니메이션
+  // 상태(유형) 변경 시 fade 애니메이션
+  const label = event ? translateEventType(event.incident_type) : '';
   const [visible, setVisible] = useState(true);
-  const [displayLabel, setDisplayLabel] = useState(event?.activity_label ?? '');
-  const prevLabelRef = useRef(event?.activity_label ?? '');
+  const [displayLabel, setDisplayLabel] = useState(label);
+  const prevLabelRef = useRef(label);
 
   useEffect(() => {
-    const next = event?.activity_label ?? '';
-    if (next === prevLabelRef.current) return;
-
+    if (label === prevLabelRef.current) return;
     setVisible(false);
     const timer = setTimeout(() => {
-      prevLabelRef.current = next;
-      setDisplayLabel(next);
+      prevLabelRef.current = label;
+      setDisplayLabel(label);
       setVisible(true);
     }, 300);
     return () => clearTimeout(timer);
-  }, [event?.activity_label]);
+  }, [label]);
 
-  // DANGER pulse 상태
   const isDanger = riskKey === 'DANGER';
 
   const panelStyle: React.CSSProperties = {
     backgroundColor: '#f8fafc',
-    border: isDanger
-      ? `1px solid ${colors.border}`
-      : '1px solid #e2e8f0',
+    border: isDanger ? `1px solid ${colors.border}` : '1px solid #e2e8f0',
     borderRadius: '8px',
     padding: '8px 12px',
     backdropFilter: 'none',
@@ -62,7 +60,7 @@ export default function ActionOverlayPanel({ event, isConnected, isDelayed }: Pr
     );
   }
 
-  // 3초 이상 갱신된 값이 없거나 데이터가 없으면 기본값은 "안전"
+  // 최근 사건이 없거나 오래됐으면(60초 초과) 기본값은 "안전"
   if (!event || isDelayed) {
     const safe = RISK_COLOR.NORMAL;
     return (
@@ -73,11 +71,7 @@ export default function ActionOverlayPanel({ event, isConnected, isDelayed }: Pr
         <div className="flex items-center gap-2 mt-1">
           <span
             className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
-            style={{
-              backgroundColor: safe.bg,
-              border: `1px solid ${safe.border}`,
-              color: safe.text,
-            }}
+            style={{ backgroundColor: safe.bg, border: `1px solid ${safe.border}`, color: safe.text }}
           >
             안전
           </span>
@@ -88,35 +82,21 @@ export default function ActionOverlayPanel({ event, isConnected, isDelayed }: Pr
   }
 
   return (
-    <div
-      style={panelStyle}
-      className={isDanger ? 'animate-danger-pulse' : undefined}
-    >
+    <div style={panelStyle} className={isDanger ? 'animate-danger-pulse' : undefined}>
       <div
         className="text-[11px] font-bold text-slate-700 transition-opacity duration-300 truncate"
         style={{ opacity: visible ? 1 : 0 }}
       >
-        현재 행동: {getActivityLabel(displayLabel || event.activity_label)}
+        현재 상태: {displayLabel || label}
       </div>
       <div className="flex items-center gap-2 mt-1">
         <span
           className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
-          style={{
-            backgroundColor: colors.bg,
-            border: `1px solid ${colors.border}`,
-            color: colors.text,
-          }}
+          style={{ backgroundColor: colors.bg, border: `1px solid ${colors.border}`, color: colors.text }}
         >
           {colors.label}
         </span>
-        <span className="text-[10px] text-slate-400 shrink-0">
-          위험도 {Math.max(1, Math.min(5, Math.round(event.risk_score * 5)))}
-        </span>
-        {isDelayed && (
-          <span className="text-[10px] text-yellow-500 shrink-0" title="데이터 수신 지연">
-            ⚠ 지연
-          </span>
-        )}
+        <span className="text-[10px] text-slate-400 shrink-0">위험도 {CAT_TO_SCORE[cat]}</span>
       </div>
     </div>
   );

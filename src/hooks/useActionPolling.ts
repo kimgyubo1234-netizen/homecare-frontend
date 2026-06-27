@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import type { ActionEvent, ActionEventListResponse } from '@/types/api';
+import { toIncidentEvent } from '@/lib/incident';
+import type { IncidentEvent, IncidentListResponse } from '@/types/api';
 
 interface UseActionPollingOptions {
   patientId: string;
@@ -9,19 +10,22 @@ interface UseActionPollingOptions {
 }
 
 interface UseActionPollingResult {
-  latestEvent: ActionEvent | null;
+  latestEvent: IncidentEvent | null;
   isConnected: boolean;
   isDelayed: boolean;
 }
 
 const FAILURE_LIMIT = 3;
 
+// 실시간 오버레이 소스: GET /api/v1/incidents (사건 단위, JWT 인증).
+// 최신 사건 1건을 폴링하여 현재 상태로 표시한다. 사건은 raw 프레임보다 드물게
+// 발생하므로, 최신 사건이 delayThresholdMs(기본 60초)보다 오래됐으면 "안전"으로 처리.
 export function useActionPolling({
   patientId,
-  intervalMs = 1500,
-  delayThresholdMs = 3000,
+  intervalMs = 3000,
+  delayThresholdMs = 60_000,
 }: UseActionPollingOptions): UseActionPollingResult {
-  const [latestEvent, setLatestEvent] = useState<ActionEvent | null>(null);
+  const [latestEvent, setLatestEvent] = useState<IncidentEvent | null>(null);
   const [isConnected, setIsConnected] = useState(true);
   const [isDelayed, setIsDelayed] = useState(false);
 
@@ -34,8 +38,9 @@ export function useActionPolling({
       if (!active) return;
       try {
         const params = new URLSearchParams({ patient_id: patientId, limit: '1' });
-        const data = await apiFetch<ActionEventListResponse>(`/api/v1/events?${params}`);
-        const event = data.items?.[0] ?? null;
+        const data = await apiFetch<IncidentListResponse>(`/api/v1/incidents?${params}`);
+        const item = data.items?.[0] ?? null;
+        const event = item ? toIncidentEvent(item) : null;
 
         if (!active) return;
         failureCountRef.current = 0;
@@ -45,6 +50,8 @@ export function useActionPolling({
           setLatestEvent(event);
           const age = Date.now() - new Date(event.ts_utc).getTime();
           setIsDelayed(age > delayThresholdMs);
+        } else {
+          setIsDelayed(true);
         }
       } catch {
         if (!active) return;
